@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Markazlar: hamma faqat TASDIQLANGANLARINI o'qiy oladi.
+    // Mini App so'rovi where("approved", "==", true) bilan bo'lishi shart, aks holda qoida rad etadi.
+    // Yozish faqat bot orqali (Admin SDK qoidalarni chetlab o'tadi).
+    match /centers/{id} {
+      allow read: if resource.data.approved == true;
+      allow write: if false;
+    }
+
+    // Arizalar: Mini App faqat YANGI ariza yarata oladi. O'qish/o'zgartirish/o'chirish — faqat bot.
+    match /applications/{id} {
+      function validApplication(d) {
+        return d.keys().hasOnly(['centerId', 'centerName', 'group', 'name', 'phone',
+                                 'tgUserId', 'tgUsername', 'createdAt', 'notified', 'status'])
+          && d.keys().hasAll(['centerId', 'name', 'phone', 'createdAt', 'notified', 'status'])
+          && d.centerId is string && d.centerId.size() > 0 && d.centerId.size() <= 64
+          && (!('centerName' in d) || (d.centerName is string && d.centerName.size() <= 100))
+          && (!('group' in d) || (d.group is string && d.group.size() <= 120))
+          && d.name is string && d.name.size() >= 2 && d.name.size() <= 60
+          && d.phone is string && d.phone.matches('^\\+998[0-9]{9}$')
+          && (!('tgUserId' in d) || d.tgUserId == null || d.tgUserId is int)
+          && (!('tgUsername' in d) || d.tgUsername == null
+              || (d.tgUsername is string && d.tgUsername.size() <= 64))
+          && d.notified == false
+          && d.status == 'new'
+          && d.createdAt == request.time;
+      }
+
+      allow create: if validApplication(request.resource.data)
+        // ariza faqat mavjud va tasdiqlangan markazga
+        && get(/databases/$(database)/documents/centers/$(request.resource.data.centerId)).data.approved == true;
+      allow read, update, delete: if false;
+    }
+  }
+}

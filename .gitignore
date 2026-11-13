@@ -1,0 +1,17 @@
+# Maxfiy fayllar — hech qachon GitHub'ga yuklamang
+.env
+serviceAccount.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
