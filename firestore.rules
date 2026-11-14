@@ -10,6 +10,10 @@ service cloud.firestore {
     function isTg(id) {
       return tg() != null && tg() == id;
     }
+    // Admin (bot ADMIN_IDS dagilarga "admin" claim'ini qo'yadi) — admin dashboard (?mode=admin)
+    function isAdmin() {
+      return request.auth != null && request.auth.token.get('admin', false) == true;
+    }
 
     // Ochiq sozlamalar (bot username) — faqat bot yozadi.
     match /meta/public {
@@ -26,7 +30,13 @@ service cloud.firestore {
       return isTg(get(/databases/$(database)/documents/centers/$(cid)).data.ownerTgId);
     }
     match /centers/{id} {
-      allow read: if resource.data.approved == true || isTg(resource.data.ownerTgId);
+      allow read: if resource.data.approved == true || isTg(resource.data.ownerTgId) || isAdmin();
+      // Admin: tasdiqlash / rad etish / VIP. Egaga xabarni bot yuboradi (approvedBy: 'web').
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approved', 'vip', 'approvedBy', 'status', 'updatedAt'])
+        && request.resource.data.approvedBy == 'web'
+        && request.resource.data.status in ['approved', 'rejected']
+        && request.resource.data.approved is bool && request.resource.data.vip is bool;
       allow update: if isTg(resource.data.ownerTgId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['groups', 'updatedAt'])
         && request.resource.data.groups is list && request.resource.data.groups.size() <= 10
@@ -48,7 +58,7 @@ service cloud.firestore {
     // Texnik xato yozuvlari: ilova yozadi (o'lchami cheklangan), faqat admin o'qiydi.
     // "admin" claim'ini bot ADMIN_IDS dagilarga Telegram tasdiqlashda qo'yadi.
     match /logs/{id} {
-      allow read: if request.auth != null && request.auth.token.get('admin', false) == true;
+      allow read: if isAdmin();
       allow create: if request.resource.data.keys().hasOnly(['source', 'level', 'message', 'stack', 'screen', 'device', 'url', 'tgUserId', 'createdAt'])
         && request.resource.data.source == 'web' && request.resource.data.level == 'error'
         && request.resource.data.message is string && request.resource.data.message.size() <= 1000
@@ -63,7 +73,7 @@ service cloud.firestore {
 
     // AI yordamchi: foydalanuvchi savol yozadi, javobni bot (Groq orqali) yozadi.
     match /aiRequests/{id} {
-      allow read: if isTg(resource.data.userTgId);
+      allow read: if isTg(resource.data.userTgId) || isAdmin();
       allow create: if isTg(request.resource.data.userTgId)
         && request.resource.data.keys().hasOnly(['userTgId', 'query', 'history', 'pos', 'status', 'createdAt'])
         && request.resource.data.query is string && request.resource.data.query.size() > 0 && request.resource.data.query.size() <= 500
@@ -119,7 +129,7 @@ service cloud.firestore {
       allow create: if validApplication(request.resource.data)
         // ariza faqat mavjud va tasdiqlangan markazga
         && get(/databases/$(database)/documents/centers/$(request.resource.data.centerId)).data.approved == true;
-      allow read: if isTg(resource.data.tgUserId) || ownsCenter(resource.data.centerId);
+      allow read: if isTg(resource.data.tgUserId) || ownsCenter(resource.data.centerId) || isAdmin();
       // Kabinet: markaz egasi holatni belgilaydi; bot "statusBy: web" ni ko'rib ota-onaga xabar yuboradi
       allow update: if ownsCenter(resource.data.centerId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'statusBy', 'trialAt'])
@@ -137,12 +147,13 @@ service cloud.firestore {
         && request.resource.data.groupIndex is int && request.resource.data.groupIndex >= 0 && request.resource.data.groupIndex < 20
         && request.resource.data.notified == false
         && request.resource.data.createdAt == request.time;
-      allow read, update, delete: if false;
+      allow read: if isAdmin();
+      allow update, delete: if false;
     }
 
     // Markaz bilan chat. Hujjat ID: "<tgId>_<centerId>". Markaz javoblarini bot yozadi.
     match /chats/{chatId} {
-      allow read: if resource == null || isTg(resource.data.userTgId);
+      allow read: if resource == null || isTg(resource.data.userTgId) || isAdmin();
       allow create: if isTg(request.resource.data.userTgId)
         && chatId == string(tg()) + '_' + request.resource.data.centerId
         && request.resource.data.keys().hasOnly(['type', 'centerId', 'centerName', 'userTgId', 'userName', 'userUsername',

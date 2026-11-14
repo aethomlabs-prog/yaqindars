@@ -10,6 +10,8 @@ import {
   getDocs,
   increment,
   initializeFirestore,
+  getCountFromServer,
+  limit,
   getDocsFromCache,
   getDocsFromServer,
   persistentLocalCache,
@@ -27,7 +29,7 @@ import {
   type Firestore
 } from "firebase/firestore";
 import { FIREBASE_CONFIG } from "../../config";
-import type { ApplyInput, Backend, OwnerApi, OwnerCenter, ProfileDoc } from "./backend";
+import type { AdminApi, AdminCenter, ApplyInput, Backend, OwnerApi, OwnerCenter, ProfileDoc } from "./backend";
 import { centerChatId } from "./backend";
 import { ruleBasedReply } from "./match";
 import { initData, tgUser } from "./telegram";
@@ -100,17 +102,22 @@ function toApp(id: string, d: DocumentData): Application {
  */
 interface LinkResult {
   tg: number | null;
+  /** bot ADMIN_IDS dagilarga qo‘yadigan "admin" claim'i */
+  admin?: boolean;
   /** Telegram ichidamiz, lekin bot javob bermadi / xato — foydalanuvchiga ko‘rsatiladi */
   offline: boolean;
 }
+
+const ADMIN_MODE = typeof location !== "undefined" && new URLSearchParams(location.search).get("mode") === "admin";
 
 async function linkTelegram(auth: Auth, db: Firestore): Promise<LinkResult> {
   if (!initData || !tgUser) return { tg: null, offline: false }; // brauzer yoki klaviatura tugmasi — mehmon rejimi normal
   try {
     await auth.authStateReady();
     const user = auth.currentUser ?? (await signInAnonymously(auth)).user;
-    const cached = await user.getIdTokenResult();
-    if (cached.claims.tg === tgUser.id) return { tg: tgUser.id, offline: false };
+    // Admin panelda tokenni yangilaymiz — "admin" claim'i keyinroq qo‘shilgan bo‘lishi mumkin
+    const cached = await user.getIdTokenResult(ADMIN_MODE);
+    if (cached.claims.tg === tgUser.id) return { tg: tgUser.id, offline: false, admin: cached.claims.admin === true };
 
     const ref = doc(db, "tgLinks", user.uid);
     await setDoc(ref, { initData, status: "pending", createdAt: serverTimestamp() });
@@ -136,7 +143,7 @@ async function linkTelegram(auth: Auth, db: Firestore): Promise<LinkResult> {
     if (!ok) return { tg: null, offline: true };
     const fresh = await user.getIdTokenResult(true);
     const tg = fresh.claims.tg === tgUser.id ? tgUser.id : null;
-    return { tg, offline: !tg };
+    return { tg, offline: !tg, admin: fresh.claims.admin === true };
   } catch (e) {
     console.warn("Telegram tasdiqlash ishlamadi:", e);
     return { tg: null, offline: true };
@@ -240,8 +247,61 @@ export async function createFirebaseBackend(): Promise<Backend> {
       }
     : undefined;
 
+  // Admin dashboard — Firestore qoidalari "admin" claim'ini tekshiradi
+  const admin: AdminApi | undefined = link.admin
+    ? {
+        async loadCenters() {
+          const snap = await getDocs(collection(db, "centers"));
+          return snap.docs.map((d): AdminCenter => {
+            const x = d.data({ serverTimestamps: "estimate" });
+            return {
+              ...toCenter(d.id, x),
+              approved: x.approved === true,
+              tariff: x.tariff === "vip" || x.tariff === "oddiy" ? x.tariff : null,
+              ownerTgId: typeof x.ownerTgId === "number" ? x.ownerTgId : null,
+              ownerUsername: typeof x.ownerUsername === "string" ? x.ownerUsername : null,
+              createdMs: ms(x.createdAt)
+            };
+          });
+        },
+        async loadApplications(sinceMs) {
+          const snap = await getDocs(query(collection(db, "applications"), where("createdAt", ">=", Timestamp.fromMillis(sinceMs)), orderBy("createdAt", "desc")));
+          return snap.docs.map((d) => {
+            const x = d.data({ serverTimestamps: "estimate" });
+            return { ...toApp(d.id, x), tgUsername: typeof x.tgUsername === "string" ? x.tgUsername : null };
+          });
+        },
+        async loadLogs(n) {
+          const snap = await getDocs(query(collection(db, "logs"), orderBy("createdAt", "desc"), limit(n)));
+          return snap.docs.map((d) => {
+            const x = d.data({ serverTimestamps: "estimate" });
+            return { id: d.id, source: str(x.source, 10), message: str(x.message, 500), screen: str(x.screen, 100), device: str(x.device, 200), createdMs: ms(x.createdAt) };
+          });
+        },
+        async counts() {
+          const day = Timestamp.fromMillis(Date.now() - 86400000);
+          const [chats, waitlist, ai] = await Promise.all([
+            getCountFromServer(collection(db, "chats")).catch(() => null),
+            getCountFromServer(collection(db, "waitlist")).catch(() => null),
+            getCountFromServer(query(collection(db, "aiRequests"), where("createdAt", ">=", day))).catch(() => null)
+          ]);
+          return { chats: chats?.data().count ?? 0, waitlist: waitlist?.data().count ?? 0, ai24h: ai?.data().count ?? 0 };
+        },
+        async setCenter(c, patch) {
+          await updateDoc(doc(db, "centers", c.id), {
+            approved: patch.status === "approved",
+            vip: patch.status === "approved" && patch.vip,
+            status: patch.status,
+            approvedBy: "web",
+            updatedAt: serverTimestamp()
+          });
+        }
+      }
+    : undefined;
+
   const backend: Backend = {
     owner,
+    admin,
     mode: "firebase",
     authed,
     offline: link.offline,

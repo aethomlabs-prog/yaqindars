@@ -28,6 +28,7 @@ const MapScreen = lazy(() => import("../screens/map/MapScreen"));
 const RegisterApp = lazy(() => import("../register/RegisterApp"));
 const OwnerApp = lazy(() => import("../owner/OwnerApp"));
 const InstallLanding = lazy(() => import("../components/InstallLanding"));
+const AdminApp = lazy(() => import("../admin/AdminApp"));
 const MODE = new URLSearchParams(location.search).get("mode"); // register | owner | null
 
 function renderRoute(r: Route): ReactNode {
@@ -125,6 +126,8 @@ export function App() {
         <RegisterRoot />
       ) : MODE === "owner" ? (
         <OwnerRoot />
+      ) : MODE === "admin" ? (
+        <AdminRoot />
       ) : (
         <MainApp />
       )}
@@ -132,6 +135,20 @@ export function App() {
       <NetworkModal />
       {DEBUG && <DebugPanel />}
     </IslandProvider>
+  );
+}
+
+/** Admin dashboard (bot: /admin) */
+function AdminRoot() {
+  useTheme();
+  const boot = useApp((s) => s.boot);
+  useEffect(() => {
+    boot();
+  }, [boot]);
+  return (
+    <Suspense fallback={<Loading />}>
+      <AdminApp />
+    </Suspense>
   );
 }
 

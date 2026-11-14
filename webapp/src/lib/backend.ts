@@ -27,6 +27,35 @@ export interface OwnerCenter extends Center {
   tariff: "oddiy" | "vip" | null;
 }
 
+/** Admin dashboard */
+export interface AdminCenter extends OwnerCenter {
+  ownerTgId: number | null;
+  ownerUsername: string | null;
+  createdMs: number;
+}
+export interface AdminLog {
+  id: string;
+  source: string;
+  message: string;
+  screen: string;
+  device: string;
+  createdMs: number;
+}
+export interface AdminCounts {
+  chats: number;
+  waitlist: number;
+  ai24h: number;
+}
+export interface AdminApi {
+  loadCenters(): Promise<AdminCenter[]>;
+  /** sinceMs dan beri arizalar */
+  loadApplications(sinceMs: number): Promise<(Application & { tgUsername: string | null })[]>;
+  loadLogs(limit: number): Promise<AdminLog[]>;
+  counts(): Promise<AdminCounts>;
+  /** status: approved | rejected; vip — VIP holati */
+  setCenter(c: AdminCenter, patch: { status: "approved" | "rejected"; vip: boolean }): Promise<void>;
+}
+
 export interface OwnerApi {
   watchMyCenters(cb: (c: OwnerCenter[]) => void): Unsub;
   saveGroups(centerId: string, groups: Group[]): Promise<void>;
@@ -42,6 +71,8 @@ export interface Backend {
   authed: boolean;
   /** Markaz bilan chat ishlaydimi (auth kerak) */
   centerChatEnabled: boolean;
+  /** Admin dashboard (faqat "admin" claim'i bor foydalanuvchi yoki DEMO) */
+  admin?: AdminApi;
   /** Kabinet (faqat Telegram orqali tasdiqlangan foydalanuvchi yoki DEMO) */
   owner?: OwnerApi;
   /** Bot username (bot ishga tushganda bazaga yozadi) — «Ulashish» havolalari uchun */

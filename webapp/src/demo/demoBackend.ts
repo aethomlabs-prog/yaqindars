@@ -1,5 +1,5 @@
 /* DEMO backend: hammasi qurilmada (localStorage), markaz javoblari va ariza holatlari simulyatsiya qilinadi. */
-import type { ApplyInput, Backend, OwnerCenter, ProfileDoc } from "../lib/backend";
+import type { AdminApi, AdminCenter, ApplyInput, Backend, OwnerCenter, ProfileDoc } from "../lib/backend";
 import { centerChatId } from "../lib/backend";
 import { nextLessonMs } from "../lib/format";
 import { RISHTON } from "../lib/geo";
@@ -106,8 +106,69 @@ export function createDemoBackend(): Backend {
     return () => void ownerListeners.delete(fn);
   };
 
+  // DEMO admin: tasdiqlangan markazlar + 2 ta kutilayotgan, 30 kunlik namuna arizalar
+  const DAYMS = 86400000;
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const adminCenters: AdminCenter[] = [
+    ...DEMO_CENTERS.map((c, i) => ({ ...structuredClone(c), approved: true, tariff: (c.vip ? "vip" : "oddiy") as "vip" | "oddiy", ownerTgId: 100000 + i, ownerUsername: `markaz_${i + 1}`, createdMs: Date.now() - (40 - i) * DAYMS })),
+    ...["Namuna: Yangi Avlod", "Namuna: Bolajon to‘garagi"].map((name, i) => ({
+      ...structuredClone(DEMO_CENTERS[i + 2]),
+      id: `pending${i}`,
+      name,
+      vip: false,
+      approved: false,
+      tariff: (i === 0 ? "vip" : "oddiy") as "vip" | "oddiy",
+      ownerTgId: 200000 + i,
+      ownerUsername: i === 0 ? "yangi_avlod" : null,
+      createdMs: Date.now() - (i + 1) * 3600000
+    }))
+  ];
+  const STAT: AppStatus[] = ["new", "seen", "accepted", "accepted", "rejected"];
+  const NAMES = ["Nodira", "Sardor", "Gulbahor", "Jasur", "Malika", "Bekzod", "Dilnoza", "Aziz", "Shahlo", "Otabek"];
+  const adminApps: (Application & { tgUsername: string | null })[] = [];
+  for (let d = 29; d >= 0; d--) {
+    const n = Math.round(1 + rnd() * 4 + (29 - d) / 8);
+    for (let k = 0; k < n; k++) {
+      const c = DEMO_CENTERS[Math.floor(rnd() * DEMO_CENTERS.length)];
+      const gi = Math.floor(rnd() * c.groups.length);
+      const g = c.groups[gi];
+      const age = d * DAYMS + Math.floor(rnd() * DAYMS);
+      adminApps.push({
+        id: `aa${d}_${k}`, centerId: c.id, centerName: c.name, group: `${g.subject} · ${g.days.join(", ")} · ${g.time}`, groupIndex: gi,
+        name: NAMES[Math.floor(rnd() * NAMES.length)], phone: `+99890${String(1000000 + Math.floor(rnd() * 8999999))}`, childId: null, comment: "",
+        status: d < 1 ? "new" : STAT[Math.floor(rnd() * STAT.length)], createdMs: Date.now() - age, trialMs: null, tgUsername: rnd() > 0.5 ? `ota${k}` : null
+      });
+    }
+  }
+  const admin: AdminApi = {
+    async loadCenters() {
+      await new Promise((r) => setTimeout(r, 300));
+      return adminCenters.map((c) => ({ ...c }));
+    },
+    async loadApplications(sinceMs) {
+      return adminApps.filter((a) => a.createdMs >= sinceMs).sort((a, b) => b.createdMs - a.createdMs);
+    },
+    async loadLogs() {
+      return [
+        { id: "l1", source: "web", message: "TypeError: Cannot read properties of undefined (reading 'lat')", screen: "map", device: "Telegram android v8.0 · 393×851", createdMs: Date.now() - 2 * 3600000 },
+        { id: "l2", source: "bot", message: "Update 912 ni qayta ishlashda xato (user 5512, tugma: 'g:demo1:0:inc')", screen: "yaqindars", device: "server · Python 3.12", createdMs: Date.now() - 26 * 3600000 }
+      ];
+    },
+    async counts() {
+      return { chats: state.chats.length, waitlist: 6, ai24h: 14 };
+    },
+    async setCenter(c, patch) {
+      const x = adminCenters.find((y) => y.id === c.id);
+      if (!x) return;
+      if (patch.status === "rejected") adminCenters.splice(adminCenters.indexOf(x), 1);
+      else Object.assign(x, { approved: true, vip: patch.vip });
+    }
+  };
+
   return {
     mode: "demo",
+    admin,
     owner: {
       watchMyCenters: (cb) => ownerSub(() => cb(mine.map((c) => ({ ...c, groups: c.groups.map((g) => ({ ...g })) })))),
       async saveGroups(centerId, groups) {

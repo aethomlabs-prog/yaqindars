@@ -59,6 +59,7 @@ REGISTER_URL = _with_param(WEBAPP_URL, "mode", "register")
 # Ilovani TELEGRAM'SIZ (brauzer orqali haqiqiy ilova — PWA) o'rnatish sahifasi; URL tugma bilan brauzerda ochiladi
 INSTALL_URL = _with_param(WEBAPP_URL, "install", "1")
 OWNER_URL = _with_param(WEBAPP_URL, "mode", "owner")  # ta'lim beruvchi kabineti
+ADMIN_URL = _with_param(WEBAPP_URL, "mode", "admin")  # admin dashboard
 PRIVACY_URL = urljoin(WEBAPP_URL.split("?")[0], "privacy")  # webapp/public/privacy.html
 
 # AI yordamchi (Groq, ixtiyoriy). Kalit bo'lmasa — ilovada oddiy qidiruv ishlaydi.
@@ -510,7 +511,7 @@ async def help_cmd(message: Message):
         f"🔒 <a href=\"{PRIVACY_URL}\">Maxfiylik siyosati</a>"
     )
     if is_admin(message.from_user.id):
-        text += "\n\nAdmin:\n/vip MARKAZ_ID — VIP ni yoqish/o‘chirish\n/stat — statistika\n/logs — oxirgi xatolar"
+        text += "\n\nAdmin:\n/admin — boshqaruv paneli (dashboard)\n/vip MARKAZ_ID — VIP ni yoqish/o‘chirish\n/stat — statistika\n/logs — oxirgi xatolar"
     await message.answer(text, disable_web_page_preview=True)
 
 
@@ -1214,6 +1215,18 @@ async def on_error(event: ErrorEvent):
     return True
 
 
+@router.message(Command("admin"))
+async def admin_dashboard(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[[ibtn("📊 Admin panelni ochish", ADMIN_URL, "primary")]])
+    await message.answer(
+        "📊 <b>Admin panel</b>\n\nMarkazlar, arizalar, daromad, AI va xatolar — bitta oynada. "
+        "Kompyuterdagi Telegram’da keng oynada qulayroq.",
+        reply_markup=kb,
+    )
+
+
 @router.message(Command("logs"))
 async def logs_cmd(message: Message):
     if not is_admin(message.from_user.id):
@@ -1675,6 +1688,53 @@ def start_ai_watcher(loop: asyncio.AbstractEventLoop):
     return AI_REQS.where(filter=FieldFilter("status", "==", "pending")).on_snapshot(on_snapshot)
 
 
+# ---------------- Admin panel: tasdiqlash / rad etish -> egaga xabar ----------------
+async def process_web_approval(bot: Bot, ref):
+    snap = await asyncio.to_thread(ref.get)
+    st = as_dict(snap).get("status")
+    if st not in ("approved", "rejected"):
+        return
+    c = await claim_if(
+        ref,
+        lambda d: d.get("approvedBy") == "web" and d.get("status") == st and d.get("approvalNotified") != st,
+        {"approvalNotified": st},
+    )
+    if not c:
+        return
+    owner, name = c.get("ownerTgId"), escape(str(c.get("name", "")))
+    if st == "approved":
+        vip = " ⭐ VIP tarif yoqildi (birinchi oy bepul)." if c.get("vip") else ""
+        text = f"🎉 <b>{name}</b> tasdiqlandi va xaritada ko‘rinmoqda!{vip}\nGuruhlar va bo‘sh joylarni boshqarish: /markaz"
+    else:
+        text = f"Afsuski, <b>{name}</b> ro‘yxatdan o‘tkazilmadi. Savollar bo‘lsa — «💬 Admin bilan bog‘lanish»."
+        await asyncio.to_thread(ref.delete)
+    if isinstance(owner, int):
+        try:
+            await bot.send_message(owner, text)
+        except Exception as e:  # noqa: BLE001
+            log.info("Egaga yuborilmadi: %s", e)
+
+
+def start_approval_watcher(bot: Bot, loop: asyncio.AbstractEventLoop):
+    def on_snapshot(_docs, changes, _read_time):
+        for ch in changes:
+            if ch.type.name in ("ADDED", "MODIFIED"):
+                asyncio.run_coroutine_threadsafe(process_web_approval(bot, ch.document.reference), loop)
+
+    return CENTERS.where(filter=FieldFilter("approvedBy", "==", "web")).on_snapshot(on_snapshot)
+
+
+def ensure_admin_claims():
+    """ADMIN_IDS dagilarning allaqachon ulangan anonim akkauntlariga "admin" claim'ini qo'shadi
+    (claim faqat ulanish paytida qo'yilardi — oldin ulanganlarda yo'q bo'lishi mumkin)."""
+    for admin in ADMIN_IDS:
+        for link in LINKS.where(filter=FieldFilter("tg", "==", admin)).stream():
+            try:
+                fb_auth.set_custom_user_claims(link.id, {"tg": admin, "admin": True})
+            except Exception as e:  # noqa: BLE001
+                log.info("Admin claim (%s): %s", link.id, e)
+
+
 # ---------------- Weekly reminder ----------------
 async def reminder_loop(bot: Bot):
     while True:
@@ -1758,6 +1818,7 @@ async def main():
         BotCommand(command="markaz", description="Markazni qo‘shish / boshqarish"),
         BotCommand(command="help", description="Yordam"),
         BotCommand(command="delete", description="Ma’lumotlarimni o‘chirish"),
+        BotCommand(command="admin", description="Admin panel (faqat admin)"),
         BotCommand(command="cancel", description="Bekor qilish"),
     ])
 
@@ -1776,6 +1837,8 @@ async def main():
     seats = start_seats_watcher(bot, loop)
     deletes = start_delete_watcher(bot, loop)
     ai = start_ai_watcher(loop) if GROQ_API_KEY else None
+    approvals = start_approval_watcher(bot, loop)
+    await asyncio.to_thread(ensure_admin_claims)
     reminder = asyncio.create_task(reminder_loop(bot))
     cleanup = asyncio.create_task(cleanup_loop())
     log.info("Bot ishga tushdi. Adminlar: %s | AI: %s", ", ".join(map(str, ADMIN_IDS)) or "yo‘q",
@@ -1791,6 +1854,7 @@ async def main():
         deletes.unsubscribe()
         if ai:
             ai.unsubscribe()
+        approvals.unsubscribe()
         reminder.cancel()
         cleanup.cancel()
         log_listener.stop()

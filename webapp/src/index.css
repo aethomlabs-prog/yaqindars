@@ -261,3 +261,17 @@ select {
 .yd-success-art svg {
   overflow: visible;
 }
+
+/* Admin grafiklari (dataviz: validatsiyadan o‘tgan bitta qator rangi; qorong‘i — alohida qadam) */
+:root {
+  --viz-1: #2a78d6;
+  --viz-grid: rgba(20, 33, 61, 0.08);
+  --st-good: #0ca30c;
+  --st-warning: #fab219;
+  --st-serious: #ec835a;
+  --st-critical: #d03b3b;
+}
+[data-theme="dark"] {
+  --viz-1: #3987e5;
+  --viz-grid: rgba(255, 255, 255, 0.08);
+}
