@@ -218,7 +218,7 @@ export function HomeScreen() {
 
       {free.length > 0 && (
         <>
-          <SectionTitle title="Hozir bo‘sh joy bor" action="Barchasi" onAction={() => (setFilters({ freeOnly: true, subject: null }), setTab("map"))} />
+          <SectionTitle title="Bo‘sh joyi bor guruhlar" action="Barchasi" onAction={() => (setFilters({ freeOnly: true, subject: null }), setTab("map"))} />
           <div className="no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 scroll-px-4">
             {free.map((x) => (
               <FreeSeatCard key={`${x.c.id}-${x.gi}`} c={x.c} groupIndex={x.gi} km={x.km} />

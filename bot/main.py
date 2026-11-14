@@ -111,7 +111,6 @@ from aiogram.types import (  # noqa: E402
     MenuButtonWebApp,
     Message,
     ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
     WebAppInfo,
 )
 from firebase_admin import auth as fb_auth, credentials, firestore  # noqa: E402
@@ -317,7 +316,7 @@ async def cancel(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
         "Bekor qilindi." if had_state else "Bekor qilinadigan amal yo‘q.",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=main_menu(),
     )
 
 
@@ -418,7 +417,6 @@ async def menu_teacher(message: Message, state: FSMContext):
         "Arizalarni qabul qilish, bo‘sh joylar va narxlarni boshqarish — hammasi bitta oynada.",
         reply_markup=kb,
     )
-    await message.answer("Menyu 👇", reply_markup=main_menu())
 
 
 # ---------------- Admin bilan bog'lanish ----------------
@@ -430,7 +428,7 @@ async def menu_admin(message: Message, state: FSMContext):
     await message.answer(
         "✍️ Savolingiz yoki taklifingizni bitta xabarda yozing — adminga yetkazaman va javobni shu yerga yuboraman.\n\n"
         "Bekor qilish: /cancel",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=main_menu(),
     )
 
 
@@ -497,7 +495,8 @@ async def my_id(message: Message):
 def register_keyboard(text: str = "📝 Markazni qo‘shish") -> ReplyKeyboardMarkup:
     """Mini App faqat REPLY-klaviatura tugmasidan ochilganda sendData() ishlaydi."""
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=text, web_app=WebAppInfo(url=REGISTER_URL))]],
+        # ro'yxatdan o'tish tugmasi + asosiy menyu (menyu yo'qolib qolmasin)
+        keyboard=[[KeyboardButton(text=text, web_app=WebAppInfo(url=REGISTER_URL), style="success")], *main_menu().keyboard],
         resize_keyboard=True,
         input_field_placeholder="Pastdagi tugmani bosing",
     )
@@ -553,12 +552,12 @@ async def on_register_app(message: Message, state: FSMContext, bot: Bot):
     if len(existing) >= 5:
         return await message.answer(
             "Bitta akkauntga 5 tadan ortiq markaz qo‘shib bo‘lmaydi. Admin bilan bog‘laning.",
-            reply_markup=ReplyKeyboardRemove(),
+            reply_markup=main_menu(),
         )
     if any(c.get("name") == data["name"] and not c.get("approved") for c in existing):
         return await message.answer(
             "Bu markaz allaqachon yuborilgan va admin tekshiruvida. Panel: /markaz",
-            reply_markup=ReplyKeyboardRemove(),
+            reply_markup=main_menu(),
         )
 
     doc = {
@@ -579,11 +578,9 @@ async def on_register_app(message: Message, state: FSMContext, bot: Bot):
         f"Tarif: {tariff_name} — birinchi oy bepul.\n\n"
         "Admin tekshirgach (odatda 1 kun ichida) markazingiz xaritada ko‘rinadi. "
         "Bo‘sh joylar va narxlarni quyidagi panelda boshqarasiz:",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=main_menu(),
     )
     await send_panel(message, ref.id)
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📱 Ilovani ochish", web_app=WebAppInfo(url=WEBAPP_URL))]])
-    await message.answer("Ota-onalar markazingizni qanday ko‘rishini ilovada tekshiring:", reply_markup=kb)
     await notify_admins_new_center(bot, ref.id, doc, user)
 
 
@@ -822,7 +819,7 @@ async def reg_phone(message: Message, state: FSMContext):
     await message.answer(
         "Sharoitlarni vergul bilan yozing.\nMasalan: Wi-Fi, kompyuter xonasi, konditsioner\n"
         "Yo‘q bo‘lsa «-» yuboring.",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=main_menu(),
     )
 
 
@@ -1003,7 +1000,7 @@ async def on_app_status(call: CallbackQuery, bot: Bot):
     if not center:
         return
     c = as_dict(center)
-    upd = {"status": status, "statusBy": "bot", "updatedAt": firestore.SERVER_TIMESTAMP}
+    upd = {"status": status, "statusBy": "bot", "statusNotified": status, "updatedAt": firestore.SERVER_TIMESTAMP}
     trial = None
     if status == "accepted":
         groups = c.get("groups") or []
@@ -1249,8 +1246,8 @@ async def stale_callback(call: CallbackQuery):
 
 @router.message(StateFilter(None))
 async def no_state(message: Message):
-    await message.answer("Quyidagilardan birini tanlang 👇", reply_markup=welcome_kb())
-    await message.answer("Yoki pastdagi menyudan foydalaning.", reply_markup=main_menu())
+    # bitta xabar; pastki menyu /start'dan beri doim turadi
+    await message.answer("Quyidagilardan birini tanlang yoki pastdagi menyudan foydalaning 👇", reply_markup=welcome_kb())
 
 
 @router.message()
@@ -1405,6 +1402,8 @@ async def notify_waitlist(bot: Bot, cid: str, idx: int, center: dict):
             w = as_dict(d)
             if w.get("groupIndex") != idx or w.get("notified"):
                 continue
+            if not await claim_if(d.reference, lambda x: not x.get("notified"), {"notified": True}):
+                continue  # parallel ishga tushgan boshqa chaqiruv allaqachon yubordi
             uid = w.get("userTgId")
             prefs = as_dict(await asyncio.to_thread(USERS.document(str(uid)).get)) if isinstance(uid, int) else {}
             if (prefs.get("notify") or {}).get("seats") is not False:
@@ -1413,7 +1412,6 @@ async def notify_waitlist(bot: Bot, cid: str, idx: int, center: dict):
                     f"🎉 <b>{escape(str(center.get('name', '')))}</b> — «{escape(str(g.get('subject', '')))}» guruhida joy bo‘shadi!\n"
                     "Tezroq yoziling — joylar cheklangan.",
                 )
-            await asyncio.to_thread(d.reference.update, {"notified": True})
     except Exception:  # noqa: BLE001
         log.exception("Kutish ro‘yxati (%s) xabarlarida xato", cid)
 
@@ -1439,14 +1437,38 @@ async def remind_trials(bot: Bot):
         await asyncio.to_thread(d.reference.update, {"trialReminded": True})
 
 
+# ---------------- Takroriy xabarlarga qarshi: tranzaksion «band qilish» ----------------
+@firestore.transactional
+def _claim_if_txn(transaction, ref, check, patch: dict):
+    """check(data) True bo'lsa patch'ni yozadi va data'ni qaytaradi; aks holda None.
+    Bir xil hodisa ikki marta kelsa ham (snapshot ADDED+MODIFIED, tez bosishlar) faqat bittasi o'tadi."""
+    snap = ref.get(transaction=transaction)
+    if not snap.exists:
+        return None
+    data = as_dict(snap)
+    if not check(data):
+        return None
+    transaction.update(ref, patch)
+    return data
+
+
+async def claim_if(ref, check, patch: dict):
+    return await asyncio.to_thread(lambda: _claim_if_txn(db.transaction(), ref, check, patch))
+
+
 # ---------------- Kabinetdagi o'zgarishlar -> ota-onalarga xabar ----------------
 async def notify_status_from_web(bot: Bot, ref):
     snap = await asyncio.to_thread(ref.get)
-    a = as_dict(snap)
-    st = a.get("status")
-    if a.get("statusBy") != "web" or st not in ("accepted", "rejected") or a.get("statusNotified") == st:
+    st = as_dict(snap).get("status")
+    if st not in ("accepted", "rejected"):
         return
-    await asyncio.to_thread(ref.update, {"statusNotified": st})
+    a = await claim_if(
+        ref,
+        lambda d: d.get("statusBy") == "web" and d.get("status") == st and d.get("statusNotified") != st,
+        {"statusNotified": st},
+    )
+    if not a:
+        return  # boshqa hodisa allaqachon yubordi
     name = escape(str(a.get("centerName", "")))
     if st == "accepted":
         t = a.get("trialAt")
