@@ -290,3 +290,28 @@ Yangi **ikki maydonli** so‘rov qo‘shilsa (masalan `where(a) + orderBy(b)`), 
 
 Joylash (Firebase CLI bilan): `firebase deploy --only firestore` — qoidalar va indekslar birga.
 Yoki qoidalarni Console → Firestore → Rules orqali qo‘lda qo‘ying.
+
+---
+
+## Haqiqiy telefonda tekshirish ro‘yxati (Android va iPhone)
+
+Har relizdan oldin **ikkala** telefonda o‘ting. Muammo bo‘lsa, ilovani `?debug=1` bilan oching
+(masalan BotFather’dagi Mini App manziliga vaqtincha qo‘shing) va panelni «Nusxalash» bilan yuboring.
+
+| # | Qadam | Kutilgan natija | Android | iPhone |
+|---|---|---|---|---|
+| 1 | Botga `/start` | Ism bilan salom, 2 ta rangli tugma (yashil/ko‘k) va pastki menyu | ☐ | ☐ |
+| 2 | «🚀 Telegramda ochish» | Ilova to‘liq ekranda ochiladi, oq «miltillash» yo‘q | ☐ | ☐ |
+| 3 | 4–5 s kuting | «Ilovani telefoningizga o‘rnatasizmi?» → «Ha» → bosh ekranga qo‘shiladi; qayta ochilganda so‘ramaydi | ☐ | ☐ |
+| 4 | Xarita tabi | Plitkalar **butun** ekranni to‘ldiradi (kulrang joy yo‘q), aylantirganda ham | ☐ | ☐ |
+| 5 | Joylashuv | Ruxsat so‘raladi → ko‘k nuqta va aniqlik doirasi; rad etilsa — Rishton + «Joylashuvni yoqish» | ☐ | ☐ |
+| 6 | Markaz → «Bepul sinov darsi» → yuborish | «Ariza yuborildi»; Profil → Arizalarim’da ko‘rinadi | ☐ | ☐ |
+| 7 | Markaz egasining Telegram’i | «🔔 Yangi ariza» xabari, holat tugmalari bilan | ☐ | ☐ |
+| 8 | Ega «✅ Qabul qilish» bosadi (yoki kabinetda «Qabul») | Ota-onaga «✅ … qabul qildi» + sinov darsi sanasi; ilovada holat yangilanadi | ☐ | ☐ |
+| 9 | Markaz sahifasi → «Yozish» → xabar | Egaga botda keladi; «↩️ Javob berish» → javob ilovada va Telegram’da | ☐ | ☐ |
+| 10 | `/markaz` → «📝 Markazni qo‘shish» → oxirigacha | Bot «✅ qabul qilindi» deydi, admin’ga xabar keladi | ☐ | ☐ |
+| 11 | «🎓 Ta’lim beruvchi bo‘lib kirish» → «Kabinetni ochish» | Markaz, arizalar, guruhlar; ➖/➕ xaritada darhol ko‘rinadi | ☐ | ☐ |
+| 12 | Bot o‘chiq holda ilovani oching | 10 s ichida «Server bilan aloqa yo‘q» + «Qayta urinish» | ☐ | ☐ |
+| 13 | Profil → «Ma’lumotlarimni o‘chirish» (yoki `/delete`) | Tasdiqlash oynasi → hammasi o‘chadi, botdan xabar keladi | ☐ | ☐ |
+| 14 | Profil → «Maxfiylik siyosati» | `/privacy` sahifasi ochiladi | ☐ | ☐ |
+| 15 | Qorong‘i mavzu (Telegram sozlamasi) | Matnlar o‘qiladi, banner ranglari o‘zgarmaydi | ☐ | ☐ |
