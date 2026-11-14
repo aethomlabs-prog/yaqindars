@@ -6,6 +6,7 @@ import { TabBar } from "../components/ios/TabBar";
 import { Toast } from "../components/ios/Toast";
 import { InstallPrompt } from "../components/InstallPrompt";
 import { OfflineBanner } from "../components/OfflineBanner";
+import { DEBUG, DebugPanel } from "../components/DebugPanel";
 import { applyChromeColors, onThemeChanged, startParam, telegramColorScheme, useBackHandler } from "../lib/telegram";
 import { useApp, useSettings } from "../store/app";
 import { useNav, type Route, type Tab } from "../store/nav";
@@ -100,7 +101,12 @@ function useTheme() {
 }
 
 export function App() {
-  return MODE === "register" ? <RegisterRoot /> : MODE === "owner" ? <OwnerRoot /> : <MainApp />;
+  return (
+    <>
+      {MODE === "register" ? <RegisterRoot /> : MODE === "owner" ? <OwnerRoot /> : <MainApp />}
+      {DEBUG && <DebugPanel />}
+    </>
+  );
 }
 
 /** Ta’lim beruvchi kabineti (bot: «🎓 Ta’lim beruvchi bo‘lib kirish») */
