@@ -1,17 +1,22 @@
-/* Kichik iOS boshqaruv elementlari: Segmented, Switch, Chip, Badge, Button, SearchBar, Skeleton, EmptyState, Avatar. */
-import { motion } from "framer-motion";
+/* Kichik iOS boshqaruv elementlari: Segmented, Switch, Chip, Badge, Button, SearchBar, Avatar.
+ * Animatsiyalar kutubxonasiz — CSS transition. Bo‘sh holat, skelet, bo‘sh joy chipi: components/motion. */
 import { Search, X } from "lucide-react";
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { haptic } from "../../lib/telegram";
 import { initials } from "../../lib/format";
-import { spring } from "./motion";
-import { Spinner } from "./Spinner";
+
+const EASE = "cubic-bezier(.3,1.3,.5,1)";
 
 /* ---------- Segmented control ---------- */
 export function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string }) {
-  const id = useId();
+  const idx = Math.max(0, options.findIndex((o) => o.value === value));
   return (
-    <div role="tablist" aria-label={label} className="flex rounded-[9px] bg-fill p-[2px]">
+    <div role="tablist" aria-label={label} className="relative flex rounded-[9px] bg-fill p-[2px]">
+      <span
+        aria-hidden
+        className="absolute bottom-[2px] left-[2px] top-[2px] rounded-[7px] bg-card shadow-[0_3px_8px_rgba(0,0,0,.12),0_3px_1px_rgba(0,0,0,.04)] dark:bg-[#636366]"
+        style={{ width: `calc((100% - 4px) / ${options.length})`, transform: `translateX(${idx * 100}%)`, transition: `transform .32s ${EASE}` }}
+      />
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -27,9 +32,6 @@ export function Segmented<T extends string>({ value, options, onChange, label }:
             }}
             className="focus-ring relative h-8 flex-1 rounded-[7px] text-[13px] font-semibold"
           >
-            {active && (
-              <motion.span layoutId={`seg-${id}`} transition={spring} className="absolute inset-0 rounded-[7px] bg-card shadow-[0_3px_8px_rgba(0,0,0,.12),0_3px_1px_rgba(0,0,0,.04)] dark:bg-[#636366]" />
-            )}
             <span className="relative">{o.label}</span>
           </button>
         );
@@ -51,10 +53,9 @@ export function Switch({ checked, onChange, label }: { checked: boolean; onChang
       }}
       className={`focus-ring relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-200 ${checked ? "bg-[#34C759]" : "bg-fill"}`}
     >
-      <motion.span
-        className="absolute top-[2px] h-[27px] w-[27px] rounded-full bg-white shadow-[0_3px_8px_rgba(0,0,0,.15),0_3px_1px_rgba(0,0,0,.06)]"
-        animate={{ left: checked ? 22 : 2 }}
-        transition={spring}
+      <span
+        className="absolute left-[2px] top-[2px] h-[27px] w-[27px] rounded-full bg-white shadow-[0_3px_8px_rgba(0,0,0,.15),0_3px_1px_rgba(0,0,0,.06)]"
+        style={{ transform: `translateX(${checked ? 20 : 0}px)`, transition: `transform .3s ${EASE}` }}
       />
     </button>
   );
@@ -76,18 +77,6 @@ export function Chip({ active, onClick, children, label }: { active?: boolean; o
     >
       {children}
     </button>
-  );
-}
-
-/* ---------- Bo‘sh joy chipi ---------- */
-export function SeatChip({ n, compact }: { n: number; compact?: boolean }) {
-  if (n <= 0)
-    return <span className="inline-flex h-6 items-center rounded-full bg-red-soft px-2.5 text-caption text-red-text">Joy qolmadi</span>;
-  return (
-    <span className="tnum inline-flex h-6 items-center gap-1.5 rounded-full bg-green-soft px-2.5 text-caption text-green-text">
-      <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-green" aria-hidden />
-      {compact ? `${n} ta joy` : `${n} ta bo‘sh joy`}
-    </span>
   );
 }
 
@@ -147,7 +136,15 @@ export function Button({
         size === "lg" ? "h-[50px] px-5 text-[17px]" : "h-11 px-4 text-[15px]"
       } ${styles[kind]} ${className}`}
     >
-      {loading ? <Spinner size={20} /> : children}
+      {loading ? (
+        <span className="app-busy" role="progressbar" aria-label="Yuklanmoqda">
+          <i />
+          <i />
+          <i />
+        </span>
+      ) : (
+        children
+      )}
     </button>
   );
 }
@@ -215,11 +212,9 @@ export function SearchBar({
         )}
       </label>
       {focused && (
-        <motion.button
+        <button
           type="button"
-          initial={{ opacity: 0, x: 12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={spring}
+          style={{ animation: "yd-fade .25s both" }}
           className="shrink-0 whitespace-nowrap text-body text-tint"
           onClick={() => {
             onChange?.("");
@@ -229,29 +224,9 @@ export function SearchBar({
           }}
         >
           Bekor qilish
-        </motion.button>
+        </button>
       )}
     </form>
-  );
-}
-
-/* ---------- Skeleton ---------- */
-export function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`skeleton rounded-xl ${className}`} aria-hidden />;
-}
-
-/* ---------- Bo‘sh / xato holati ---------- */
-export function EmptyState({ icon, text, action, onAction }: { icon: ReactNode; text: string; action?: string; onAction?: () => void }) {
-  return (
-    <div className="flex flex-col items-center px-8 py-12 text-center">
-      <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-fill text-ink2">{icon}</div>
-      <p className="text-subhead text-ink2">{text}</p>
-      {action && (
-        <Button kind="tinted" size="md" className="mt-4" onClick={onAction}>
-          {action}
-        </Button>
-      )}
-    </div>
   );
 }
 

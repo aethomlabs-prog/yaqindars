@@ -1,16 +1,16 @@
 /* Xarita tabi: Leaflet + klasterlar, tepada fan chiplari va filtr, pastda 3 balandlikli ro‘yxat. */
 import "leaflet/dist/leaflet.css";
+import { clusterIcon, EmptyState, pinIcon, type PinState } from "../../components/motion";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import L from "leaflet";
 import "leaflet.markercluster";
-import { LocateFixed, MapPinOff, SlidersHorizontal } from "lucide-react";
+import { LocateFixed, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Circle, MapContainer, Marker, useMap } from "react-leaflet";
 import { CenterRow } from "../../components/cards";
 import { PIN_PATH } from "../../components/brand";
-import { Chip, EmptyState } from "../../components/ios/controls";
+import { Chip } from "../../components/ios/controls";
 import { DetentSheet } from "../../components/ios/Sheet";
-import { Spinner } from "../../components/ios/Spinner";
 import { SUBJECTS } from "../../lib/match";
 import { haptic, openLocationSettings } from "../../lib/telegram";
 import type { LatLng } from "../../lib/types";
@@ -20,46 +20,33 @@ import { useNav } from "../../store/nav";
 import { BaseTiles, LayerToggle, MeMarker, useBaseLayer, useMapAutoSize } from "./layers";
 import { FilterSheet } from "./FilterSheet";
 
-/* ---------- Marker ikonkalari ---------- */
-const iconCache = new Map<string, L.DivIcon>();
-function pinIcon(color: string, big: boolean, selected: boolean) {
-  const k = `${color}${big}${selected}`;
-  let icon = iconCache.get(k);
-  if (!icon) {
-    const s = selected ? 1.35 : 1;
-    const w = Math.round((big ? 38 : 30) * s);
-    const h = Math.round((big ? 46 : 36) * s);
-    icon = L.divIcon({
-      className: "yd-pin",
-      html: `<svg width="${w}" height="${h}" viewBox="0 0 100 120" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.2))"><path d="${PIN_PATH}" fill="${color}" stroke="#fff" stroke-width="6"/><circle cx="50" cy="46" r="20" fill="#fff"/></svg>`,
-      iconSize: [w, h],
-      iconAnchor: [w / 2, h]
-    });
-    iconCache.set(k, icon);
-  }
-  return icon;
-}
-const pinColor = (v: Visible) => (v.free <= 0 ? "#9AA5B8" : v.center.vip ? "#F5B700" : "#1E6FD9");
+/* ---------- Marker ikonkalari: components/motion (jonli pinlar) ---------- */
+const pinState = (v: Visible): PinState => (v.free <= 0 ? "full" : v.center.vip ? "vip" : "free");
 
-function clusterIcon(cluster: L.MarkerCluster) {
-  const n = cluster.getChildCount();
-  const size = n < 10 ? 38 : 46;
-  return L.divIcon({
-    className: "yd-cluster",
-    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:#1E6FD9;color:#fff;display:flex;align-items:center;justify-content:center;font:600 15px Inter,system-ui;border:3px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.2)">${n}</div>`,
-    iconSize: [size, size]
-  });
-}
+/** Tanlangan manzil (Uy, Maktab…) — yashil pin */
+const addressIcon = L.divIcon({
+  className: "yd-pin",
+  html: `<svg width="30" height="36" viewBox="0 0 100 120" aria-hidden="true"><path d="${PIN_PATH}" fill="#13804F" stroke="#fff" stroke-width="6"/><circle cx="50" cy="46" r="19" fill="#fff"/></svg>`,
+  iconSize: [30, 36],
+  iconAnchor: [15, 36]
+});
 
 /* ---------- Xarita qatlamlari ---------- */
 function Markers({ list, selected, onSelect }: { list: Visible[]; selected: string | null; onSelect: (id: string) => void }) {
   const map = useMap();
   const group = useRef<L.MarkerClusterGroup | null>(null);
+  const markers = useRef(new Map<string, { m: L.Marker; v: Visible }>());
+  const selRef = useRef(selected);
   const cb = useRef(onSelect);
   cb.current = onSelect;
 
   useEffect(() => {
-    const g = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 44, spiderfyOnMaxZoom: true, iconCreateFunction: clusterIcon });
+    const g = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      maxClusterRadius: 44,
+      spiderfyOnMaxZoom: true,
+      iconCreateFunction: (c) => clusterIcon(L, c.getChildCount())
+    });
     map.addLayer(g);
     group.current = g;
     return () => {
@@ -67,21 +54,39 @@ function Markers({ list, selected, onSelect }: { list: Visible[]; selected: stri
     };
   }, [map]);
 
+  // Ro'yxat o'zgarsa — markerlar qaytadan (pinlar «tushib» chiqadi)
   useEffect(() => {
     const g = group.current;
     if (!g) return;
     g.clearLayers();
+    markers.current.clear();
+    const sel = selRef.current;
     g.addLayers(
-      list.map((v) =>
-        L.marker([v.center.lat, v.center.lng], {
-          icon: pinIcon(pinColor(v), v.center.vip, v.center.id === selected),
+      list.map((v) => {
+        const m = L.marker([v.center.lat, v.center.lng], {
+          icon: pinIcon(L, pinState(v), v.center.id === sel),
           title: v.center.name,
           keyboard: true,
-          zIndexOffset: v.center.id === selected ? 1000 : v.center.vip ? 500 : 0
-        }).on("click", () => cb.current(v.center.id))
-      )
+          zIndexOffset: v.center.id === sel ? 1000 : v.center.vip ? 500 : 0
+        }).on("click", () => cb.current(v.center.id));
+        markers.current.set(v.center.id, { m, v });
+        return m;
+      })
     );
-  }, [list, selected]);
+  }, [list]);
+
+  // Tanlov o'zgarsa — faqat eski va yangi tanlangan pin yangilanadi (qolganlari qayta animatsiya qilmaydi)
+  useEffect(() => {
+    const prev = selRef.current;
+    selRef.current = selected;
+    for (const id of [prev, selected]) {
+      const x = id ? markers.current.get(id) : undefined;
+      if (!x) continue;
+      const on = id === selected;
+      x.m.setIcon(pinIcon(L, pinState(x.v), on));
+      x.m.setZIndexOffset(on ? 1000 : x.v.center.vip ? 500 : 0);
+    }
+  }, [selected]);
   return null;
 }
 
@@ -164,7 +169,7 @@ export default function MapScreen() {
         <BaseTiles layer={layer} />
         <Markers list={list} selected={selected} onSelect={select} />
         {userPos && <MeMarker pos={userPos} acc={userAcc} />}
-        {source === "address" && <Marker position={[pos.lat, pos.lng]} icon={pinIcon("#13804F", false, false)} title={label} interactive={false} />}
+        {source === "address" && <Marker position={[pos.lat, pos.lng]} icon={addressIcon} title={label} interactive={false} />}
         {f.radius && <Circle center={[pos.lat, pos.lng]} radius={f.radius * 1000} pathOptions={{ color: "#1E6FD9", weight: 1.5, fillOpacity: 0.06 }} />}
         <Controller flyTo={flyTo} sizeKey={`${h}-${tab}`} />
       </MapContainer>
@@ -205,7 +210,7 @@ export default function MapScreen() {
             }}
             className="focus-ring pressable flex h-11 items-center gap-2 rounded-full bg-tint px-4 text-subhead font-semibold text-white shadow-float"
           >
-            {locating ? <Spinner size={18} /> : <LocateFixed size={18} aria-hidden />} Joylashuvni yoqish
+            {locating ? <span className="app-busy" aria-label="Aniqlanmoqda"><i /><i /><i /></span> : <LocateFixed size={18} aria-hidden />} Joylashuvni yoqish
           </button>
         </div>
       )}
@@ -226,7 +231,7 @@ export default function MapScreen() {
         className="focus-ring pressable absolute right-3 z-[600] flex h-11 w-11 items-center justify-center rounded-full bg-card text-tint shadow-float transition-[bottom] duration-300"
         style={{ bottom: (detent === 2 ? detents[1] : detents[detent]) + 12, opacity: detent === 2 ? 0 : 1 }}
       >
-        {locating ? <Spinner size={18} /> : <LocateFixed size={21} />}
+        {locating ? <span className="app-busy" aria-label="Aniqlanmoqda"><i /><i /><i /></span> : <LocateFixed size={21} />}
       </button>
 
       {h > 0 && (
@@ -263,15 +268,10 @@ export default function MapScreen() {
               </div>
             ))}
             {status === "ready" && !list.length && (
-              <EmptyState
-                icon={<MapPinOff size={26} />}
-                text="Bu shartlarga mos markaz topilmadi."
-                action="Filtrlarni tozalash"
-                onAction={() => {
+              <EmptyState kind="search" text="Bu shartlarga mos markaz topilmadi." action={{ label: "Filtrlarni tozalash", onClick: () => {
                   f.reset();
                   f.set({ subject: null, radius: null });
-                }}
-              />
+                } }} />
             )}
           </div>
         </DetentSheet>

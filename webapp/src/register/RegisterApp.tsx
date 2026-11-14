@@ -1,15 +1,12 @@
 /* Markaz / repetitorni ro‘yxatdan o‘tkazish (bot: /markaz → «Markazni qo‘shish»).
  * Qadamlar: Tarif → Ma’lumot → Joylashuv → Guruhlar → O‘qituvchilar → Tekshirish.
  * Ma’lumot Telegram.WebApp.sendData orqali botga ketadi, bot tekshirib Firestore’ga yozadi. */
-import { AnimatePresence, motion } from "framer-motion";
 import { Check, CheckCircle2, ChevronLeft, Clock, GraduationCap, MapPin, Minus, Pencil, Plus, Trash2, Users } from "lucide-react";
+import { Skeleton } from "../components/motion";
 import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { LogoMark, SubjectIcon } from "../components/brand";
 import { Avatar, Button, Chip, Segmented } from "../components/ios/controls";
-import { spring } from "../components/ios/motion";
 import { Sheet } from "../components/ios/Sheet";
-import { Toast } from "../components/ios/Toast";
-import { Spinner } from "../components/ios/Spinner";
 import { fmtSum, maskPhone, normalizePhone } from "../lib/format";
 import { RISHTON } from "../lib/geo";
 import { SUBJECTS } from "../lib/match";
@@ -372,9 +369,9 @@ export default function RegisterApp() {
   if (sent)
     return (
       <div className="flex h-full flex-col items-center justify-center px-8 text-center" style={{ height: "var(--vh)" }}>
-        <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={spring}>
+        <div style={{ animation: "yd-pop .45s var(--yd-spring) both" }}>
           <CheckCircle2 size={76} strokeWidth={1.5} className="text-green" />
-        </motion.div>
+        </div>
         <h1 className="mt-4 text-title">{inTelegram ? "Deyarli tayyor" : "Ma’lumotlar tayyor"}</h1>
         <p className="mt-2 text-subhead text-ink2">
           {inTelegram
@@ -425,15 +422,8 @@ export default function RegisterApp() {
       </header>
 
       <div id="reg-scroll" className="scroll-y no-scrollbar relative min-h-0 flex-1">
-        <AnimatePresence mode="wait" initial={false} custom={dir}>
-          <motion.div
-            key={step}
-            custom={dir}
-            initial={{ opacity: 0, x: dir * 24 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: dir * -24 }}
-            transition={{ duration: 0.2 }}
-            className="px-4 pb-6 pt-3"
+        {/* qadam almashganda yengil siljib kiradi (yo'nalishga qarab) */}
+        <div key={step} className="px-4 pb-6 pt-3" style={{ animation: `${dir > 0 ? "app-step-next" : "app-step-prev"} .25s var(--yd-ease) both` }}
           >
             {step === "tariff" && (
               <div className="space-y-4">
@@ -549,9 +539,7 @@ export default function RegisterApp() {
                 <div className="h-[46vh] min-h-[260px]">
                   <Suspense
                     fallback={
-                      <div className="flex h-full items-center justify-center rounded-card bg-card text-ink2">
-                        <Spinner />
-                      </div>
+                      <Skeleton w="100%" h={9999} r={20} style={{ height: "100%" }} />
                     }
                   >
                     <MapPicker initial={d.pos ?? userPos ?? RISHTON} follow={picked ? null : userPos} onUserMove={() => setPicked(true)} onChange={(p) => patch({ pos: p })} />
@@ -670,8 +658,7 @@ export default function RegisterApp() {
                 <Err show={bytes > MAX_BYTES}>Ma’lumot juda uzun — tavsif yoki o‘qituvchi izohlarini qisqartiring.</Err>
               </div>
             )}
-          </motion.div>
-        </AnimatePresence>
+        </div>
       </div>
 
       {!inTelegram && (
@@ -682,7 +669,6 @@ export default function RegisterApp() {
         </div>
       )}
 
-      <Toast />
       <GroupSheet
         key={`g${groupEdit.key}`}
         open={groupEdit.open}

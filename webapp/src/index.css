@@ -118,32 +118,7 @@ select {
   }
 }
 
-/* Skeleton shimmer */
-.skeleton {
-  background: linear-gradient(90deg, var(--fill) 25%, rgba(127, 127, 127, 0.06) 50%, var(--fill) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.3s infinite linear;
-}
-@keyframes shimmer {
-  to {
-    background-position: -200% 0;
-  }
-}
-
-/* Yashil nuqta — sekin puls */
-.pulse-dot {
-  position: relative;
-}
-/* Puls animatsiyasi olib tashlandi — chalg‘itmasin */
-.pulse-dot::after {
-  display: none;
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  background: inherit;
-  animation: pulse 2s ease-out infinite;
-}
+/* Joylashuv nuqtasi (.me-dot) pulsi */
 @keyframes pulse {
   0% {
     transform: scale(1);
@@ -152,16 +127,6 @@ select {
   100% {
     transform: scale(2.6);
     opacity: 0;
-  }
-}
-
-/* iOS spinner */
-.ios-spinner {
-  animation: spin 0.9s steps(8) infinite;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
   }
 }
 
@@ -221,4 +186,78 @@ select {
 /* Sputnik suratlari qorong‘i mavzuda ham asl rangda */
 [data-theme="dark"] .leaflet-tile-pane:has(.yd-sat) {
   filter: none;
+}
+
+/* ---------- Motion UI (components/motion) — ilova mavzusiga bog‘lash ----------
+   Paket ranglari Telegram mavzusidan olinadi; foydalanuvchi mavzuni qo‘lda tanlasa ham to‘g‘ri bo‘lsin. */
+:root:root {
+  --yd-bg: var(--bg);
+  --yd-card: var(--card);
+  --yd-text: var(--ink);
+  --yd-muted: var(--ink2);
+}
+[data-theme="dark"] .yd-seat {
+  background: var(--green-soft);
+  color: var(--green-text);
+}
+[data-theme="dark"] .yd-seat.is-full {
+  background: var(--red-soft);
+  color: var(--red-text);
+}
+[data-theme="dark"] .yd-skel::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+}
+
+/* Sahifa o‘tishlari (kutubxonasiz) */
+@keyframes app-push-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes app-push-out {
+  to {
+    transform: translateX(100%);
+  }
+}
+.app-page-in {
+  animation: app-push-in 0.35s cubic-bezier(0.32, 0.72, 0, 1) backwards;
+}
+.app-page-out {
+  animation: app-push-out 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  pointer-events: none;
+}
+
+/* Tugma «band» holati va «yozmoqda…» — uch nuqta */
+@keyframes app-dot {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+.app-busy {
+  display: inline-flex;
+  gap: 4px;
+}
+.app-busy i {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: currentColor;
+  animation: app-dot 1s ease-in-out infinite;
+}
+.app-busy i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.app-busy i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* SuccessSheet halqasi kengayganda SVG chegarasida kesilmasin */
+.yd-success-art svg {
+  overflow: visible;
 }

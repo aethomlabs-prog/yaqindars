@@ -1,17 +1,13 @@
 /* iMessage uslubidagi chat bloklari: pufakcha, kun ajratgichi, «yozmoqda…», kiritish paneli. */
-import { motion } from "framer-motion";
 import { ArrowUp } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { fmtDayLabel, fmtTime } from "../lib/format";
 import { haptic } from "../lib/telegram";
-import { spring } from "./ios/motion";
 
 export function Bubble({ mine, text, ms, tail, children }: { mine: boolean; text: string; ms: number; tail: boolean; children?: ReactNode }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={spring}
+    <div
+      style={{ animation: "yd-rise .3s var(--yd-ease) both" }}
       className={`flex flex-col ${mine ? "items-end" : "items-start"} ${tail ? "mb-2" : "mb-0.5"}`}
     >
       <div
@@ -23,7 +19,7 @@ export function Bubble({ mine, text, ms, tail, children }: { mine: boolean; text
         <span className={`tnum ml-2 inline-block translate-y-1 text-[11px] ${mine ? "text-white/70" : "text-ink3"}`}>{fmtTime(ms)}</span>
       </div>
       {children}
-    </motion.div>
+    </div>
   );
 }
 
@@ -42,15 +38,12 @@ export function DaySeparator({ ms }: { ms: number }) {
 export function TypingDots() {
   return (
     <div className="mb-2 flex" aria-label="Yozmoqda">
-      <div className="flex gap-1 rounded-[20px] rounded-bl-[6px] bg-card px-4 py-3">
-        {[0, 1, 2].map((i) => (
-          <motion.span
-            key={i}
-            className="h-2 w-2 rounded-full bg-ink3"
-            animate={{ opacity: [0.3, 1, 0.3], y: [0, -2, 0] }}
-            transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }}
-          />
-        ))}
+      <div className="rounded-[20px] rounded-bl-[6px] bg-card px-4 py-3.5 text-ink3">
+        <span className="app-busy">
+          <i />
+          <i />
+          <i />
+        </span>
       </div>
     </div>
   );
@@ -96,16 +89,15 @@ export function Composer({ onSend, disabled, placeholder = "Xabar", busy }: { on
         aria-label={placeholder}
         className="min-h-[36px] flex-1 resize-none rounded-[18px] bg-card px-3.5 py-[7px] text-body leading-[22px] text-ink outline-none shadow-[0_0_0_0.5px_var(--sep)] placeholder:text-ink3 disabled:opacity-50"
       />
-      <motion.button
+      <button
         aria-label="Yuborish"
         onClick={send}
         disabled={!text.trim() || disabled || busy}
-        animate={{ scale: text.trim() ? 1 : 0.85, opacity: text.trim() ? 1 : 0.4 }}
-        transition={spring}
+        style={{ transform: `scale(${text.trim() ? 1 : 0.85})`, opacity: text.trim() ? 1 : 0.4, transition: "transform .25s cubic-bezier(.3,1.5,.5,1), opacity .2s" }}
         className="focus-ring mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-tint text-white"
       >
         <ArrowUp size={20} strokeWidth={2.6} />
-      </motion.button>
+      </button>
     </div>
   );
 }

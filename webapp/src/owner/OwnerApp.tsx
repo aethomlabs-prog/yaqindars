@@ -1,14 +1,12 @@
 /* Ta’lim beruvchi kabineti (bot: «🎓 Ta’lim beruvchi bo‘lib kirish» → ?mode=owner).
  * Markazlarim → statistika, arizalar (Ko‘rdim / Qabul / Rad), guruhlar (bo‘sh joy ➖/➕, narx). */
-import { motion } from "framer-motion";
+import { EmptyState, SkeletonList } from "../components/motion";
 import { CalendarClock, Check, ClipboardList, Eye, Hourglass, Map, Minus, Phone, Plus, Users, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { LogoMark, SubjectIcon } from "../components/brand";
-import { Button, Chip, EmptyState, VipBadge } from "../components/ios/controls";
+import { Button, Chip, VipBadge } from "../components/ios/controls";
 import { listItem } from "../components/ios/motion";
 import { Sheet } from "../components/ios/Sheet";
-import { Spinner } from "../components/ios/Spinner";
-import { Toast } from "../components/ios/Toast";
 import { OfflineBanner } from "../components/OfflineBanner";
 import type { OwnerCenter } from "../lib/backend";
 import { fmtDayLabel, fmtListTime, fmtSum, fmtTime, nextLessonMs } from "../lib/format";
@@ -83,7 +81,7 @@ function AppCard({ a, i, onStatus }: { a: Application; i: number; onStatus: (s: 
   const st = STATUS[a.status];
   const [subject, ...rest] = a.group.split(" · ");
   return (
-    <motion.div {...listItem(i)} className="rounded-card bg-card p-4 shadow-card">
+    <div {...listItem(i)} className="rounded-card bg-card p-4 shadow-card">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate text-headline">{a.name}</div>
@@ -122,7 +120,7 @@ function AppCard({ a, i, onStatus }: { a: Application; i: number; onStatus: (s: 
           </>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -209,31 +207,17 @@ export default function OwnerApp() {
       </header>
 
       {!backend ? (
-        <div className="flex justify-center py-20 text-ink2">
-          <Spinner size={28} />
-        </div>
+        <SkeletonList count={3} />
       ) : !owner ? (
-        <EmptyState
-          icon={<Users size={26} />}
-          text={
+        <EmptyState kind="applications" title="Kabinet Telegram ichida" text={
             inTelegram
               ? "Kabinetga kirish uchun botdagi «🎓 Ta’lim beruvchi bo‘lib kirish» tugmasini bosing, so‘ng «Kabinetni ochish»ni tanlang."
               : "Kabinet Telegram ichida ishlaydi: botga /start yozing va «🎓 Ta’lim beruvchi bo‘lib kirish» tugmasini bosing."
-          }
-          action="Ilovaga o‘tish"
-          onAction={goMainApp}
-        />
+          } action={{ label: "Ilovaga o‘tish", onClick: goMainApp }} />
       ) : centers === null ? (
-        <div className="flex justify-center py-20 text-ink2">
-          <Spinner size={28} />
-        </div>
+        <SkeletonList count={3} />
       ) : !centers.length ? (
-        <EmptyState
-          icon={<ClipboardList size={26} />}
-          text="Sizda hali markaz yo‘q. Botda /markaz yozing va «📝 Markazni qo‘shish» orqali 3–5 daqiqada ro‘yxatdan o‘ting — birinchi oy bepul."
-          action="Botga qaytish"
-          onAction={() => (tg?.close ? tg.close() : goMainApp())}
-        />
+        <EmptyState kind="applications" title="Markazingiz hali yo‘q" text="Sizda hali markaz yo‘q. Botda /markaz yozing va «📝 Markazni qo‘shish» orqali 3–5 daqiqada ro‘yxatdan o‘ting — birinchi oy bepul." action={{ label: "Botga qaytish", onClick: () => (tg?.close ? tg.close() : goMainApp()) }} />
       ) : (
         <div className="pb-10">
           {centers.length > 1 && (
@@ -294,7 +278,7 @@ export default function OwnerApp() {
                   {sortedApps.length ? (
                     sortedApps.map((a, i) => <AppCard key={a.id} a={a} i={i} onStatus={(s) => setStatus(a, s)} />)
                   ) : (
-                    <EmptyState icon={<ClipboardList size={26} />} text="Hozircha ariza yo‘q. Ota-onalar «Bepul sinov darsi» tugmasini bosganda shu yerda va botda chiqadi." />
+                    <EmptyState kind="applications" text="Hozircha ariza yo‘q. Ota-onalar «Bepul sinov darsi» tugmasini bosganda shu yerda va botda chiqadi." />
                   )}
                 </div>
               ) : (
@@ -342,7 +326,6 @@ export default function OwnerApp() {
       )}
 
       <PriceSheet key={priceIdx ?? -1} group={priceIdx !== null && center ? center.groups[priceIdx] : null} onSave={setPrice} onClose={() => setPriceIdx(null)} />
-      <Toast />
       <OfflineBanner />
     </div>
   );

@@ -158,10 +158,13 @@ function syncProfile(patch: Partial<ProfileDoc>) {
 }
 
 /* ---------- Ilova holati ---------- */
+/** Island bildirishnomasi (components/motion/Island). showToast — oddiy matn; notify — sarlavha, matn, bosilganda amal. */
 export interface Toast {
   id: number;
   text: string;
   kind: "ok" | "error" | "info";
+  sub?: string;
+  onTap?: () => void;
 }
 
 interface AppState {
@@ -186,11 +189,11 @@ interface AppState {
   /** Xarita ochiq paytida joylashuvni jonli kuzatish; to‘xtatish funksiyasini qaytaradi */
   watchLocation: () => () => void;
   showToast: (text: string, kind?: Toast["kind"]) => void;
+  notify: (m: { title: string; text?: string; kind?: Toast["kind"]; onTap?: () => void }) => void;
   setAiEnabled: (v: boolean) => void;
 }
 
 let toastSeq = 0;
-let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 export const useApp = create<AppState>((set, get) => ({
   backend: null,
@@ -227,7 +230,17 @@ export const useApp = create<AppState>((set, get) => ({
     get().loadCenters();
 
     backend.watchChats((chats) => set({ chats }));
-    backend.watchApplications((apps) => set({ apps }));
+    backend.watchApplications((apps) => {
+      const prev = new Map(get().apps.map((a) => [a.id, a.status]));
+      const accepted = apps.find((a) => a.status === "accepted" && prev.has(a.id) && prev.get(a.id) !== "accepted");
+      set({ apps });
+      if (accepted)
+        get().notify({
+          title: "Ariza qabul qilindi! 🎉",
+          text: accepted.centerName.replace(/^Namuna:\s*/, ""),
+          onTap: () => import("./nav").then(({ useNav }) => useNav.getState().push({ name: "applications" }, "profile"))
+        });
+    });
     backend.onTyping?.((chatId, typing) => set({ typing: { ...get().typing, [chatId]: typing } }));
 
     if (backend.authed && backend.mode === "firebase") {
@@ -279,11 +292,8 @@ export const useApp = create<AppState>((set, get) => ({
       if (!get().userPos) set({ locStatus: "denied" });
     }),
 
-  showToast: (text, kind = "info") => {
-    clearTimeout(toastTimer);
-    set({ toast: { id: ++toastSeq, text, kind } });
-    toastTimer = setTimeout(() => set({ toast: null }), 3200);
-  },
+  showToast: (text, kind = "info") => set({ toast: { id: ++toastSeq, text, kind } }),
+  notify: ({ title, text, kind = "ok", onTap }) => set({ toast: { id: ++toastSeq, text: title, sub: text, kind, onTap } }),
   setAiEnabled: (v) => set({ aiEnabled: v })
 }));
 

@@ -1,5 +1,6 @@
 /* Qidiruv: erkin matn («ingliz tili 300 minggacha shanba») → mos markazlar. */
-import { Clock, SearchX, Sparkles, X } from "lucide-react";
+import { Clock, Sparkles } from "lucide-react";
+import { EmptyState } from "../../components/motion";
 import { useMemo, useState } from "react";
 import { CenterRow } from "../../components/cards";
 import { SubjectIcon } from "../../components/brand";
@@ -124,16 +125,7 @@ export function SearchPage() {
           })}
         </div>
       ) : (
-        <div className="flex flex-col items-center px-8 py-14 text-center">
-          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-fill text-ink2">
-            <SearchX size={26} />
-          </div>
-          <p className="text-headline">Hech narsa topilmadi</p>
-          <p className="mt-1 text-subhead text-ink2">Narx yoki kunni olib tashlab ko‘ring.</p>
-          <button onClick={() => setQ("")} className="mt-4 inline-flex items-center gap-1 text-subhead text-tint">
-            <X size={15} /> Tozalash
-          </button>
-        </div>
+        <EmptyState kind="search" text="Narx yoki kunni olib tashlab ko‘ring" action={{ label: "Tozalash", onClick: () => setQ("") }} />
       )}
     </Page>
   );

@@ -1,11 +1,9 @@
 /* Xaritadan nuqta tanlash: markazdagi pin qimirlamaydi, xarita suriladi (Yandex/Uber uslubi). */
 import "leaflet/dist/leaflet.css";
-import { motion } from "framer-motion";
 import { LocateFixed } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MapContainer, useMap, useMapEvents } from "react-leaflet";
 import { PIN_PATH } from "../../components/brand";
-import { Spinner } from "../../components/ios/Spinner";
 import type { LatLng } from "../../lib/types";
 import { useApp } from "../../store/app";
 import { BaseTiles, LayerToggle, MeMarker, useBaseLayer, useMapAutoSize } from "./layers";
@@ -44,7 +42,7 @@ function LocateBtn() {
       }}
       className="focus-ring absolute bottom-3 right-3 z-[500] flex h-11 w-11 items-center justify-center rounded-full bg-card text-tint shadow-float pressable"
     >
-      {locating ? <Spinner size={18} /> : <LocateFixed size={20} />}
+      {locating ? <span className="app-busy" aria-label="Aniqlanmoqda"><i /><i /><i /></span> : <LocateFixed size={20} />}
     </button>
   );
 }
@@ -74,14 +72,14 @@ export default function MapPicker({
       </MapContainer>
       <LayerToggle layer={layer} onChange={setLayer} className="absolute left-3 top-3 z-[500] !h-9 !px-3" />
       <div className="pointer-events-none absolute left-1/2 top-1/2 z-[500] -translate-x-1/2 -translate-y-full" aria-hidden>
-        <motion.svg width={34} height={41} viewBox="0 0 100 120" animate={{ y: dragging ? -10 : 0 }} transition={{ type: "spring", stiffness: 500, damping: 25 }}>
+        <svg width={34} height={41} viewBox="0 0 100 120" style={{ transform: `translateY(${dragging ? -10 : 0}px)`, transition: "transform .3s var(--yd-spring)" }}>
           <path d={PIN_PATH} fill="#1E6FD9" stroke="#fff" strokeWidth={6} />
           <circle cx="50" cy="46" r="18" fill="#fff" />
-        </motion.svg>
+        </svg>
       </div>
-      <motion.div
+      <div
         className="pointer-events-none absolute left-1/2 top-1/2 z-[499] h-1.5 w-3 -translate-x-1/2 rounded-full bg-black/30"
-        animate={{ scale: dragging ? 0.6 : 1, opacity: dragging ? 0.4 : 0.8 }}
+        style={{ scale: dragging ? "0.6" : "1", opacity: dragging ? 0.4 : 0.8, transition: "scale .3s, opacity .3s" }}
         aria-hidden
       />
     </div>

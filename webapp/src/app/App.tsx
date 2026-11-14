@@ -1,15 +1,13 @@
-import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { pushTransition } from "../components/ios/motion";
-import { Spinner } from "../components/ios/Spinner";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { TabBar } from "../components/ios/TabBar";
-import { Toast } from "../components/ios/Toast";
+import { IslandBridge } from "../components/IslandBridge";
+import { IslandProvider, Onboarding, shouldShowOnboarding, SkeletonList, Splash } from "../components/motion";
 import { InstallPrompt } from "../components/InstallPrompt";
 import { OfflineBanner } from "../components/OfflineBanner";
 import { DEBUG, DebugPanel } from "../components/DebugPanel";
 import { applyChromeColors, onThemeChanged, startParam, telegramColorScheme, useBackHandler } from "../lib/telegram";
-import { useApp, useSettings } from "../store/app";
-import { useNav, type Route, type Tab } from "../store/nav";
+import { useApp, useProfile, useSettings } from "../store/app";
+import { useNav, type Route, type StackEntry, type Tab } from "../store/nav";
 import { HomeScreen } from "../screens/home/HomeScreen";
 import { SearchPage } from "../screens/home/SearchPage";
 import { CenterPage } from "../screens/center/CenterPage";
@@ -57,10 +55,20 @@ function renderRoute(r: Route): ReactNode {
 
 function Loading() {
   return (
-    <div className="absolute inset-0 flex items-center justify-center text-ink2">
-      <Spinner size={28} />
+    <div className="absolute inset-0 bg-bg" style={{ paddingTop: "calc(56px + var(--safe-top))" }}>
+      <SkeletonList count={4} />
     </div>
   );
+}
+
+/** Splash kamida 600 ms (aks holda chaqnab ketadi) va ma’lumot tayyor bo‘lguncha */
+function useSplashReady(ready: boolean) {
+  const [minDone, setMinDone] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMinDone(true), 600);
+    return () => clearTimeout(t);
+  }, []);
+  return ready && minDone;
 }
 
 function TabRoot({ tab }: { tab: Tab }) {
@@ -102,10 +110,11 @@ function useTheme() {
 
 export function App() {
   return (
-    <>
+    <IslandProvider>
       {MODE === "register" ? <RegisterRoot /> : MODE === "owner" ? <OwnerRoot /> : <MainApp />}
+      <IslandBridge />
       {DEBUG && <DebugPanel />}
-    </>
+    </IslandProvider>
   );
 }
 
@@ -113,27 +122,97 @@ export function App() {
 function OwnerRoot() {
   useTheme();
   const boot = useApp((s) => s.boot);
+  const authDone = useApp((s) => !!s.backend || !!s.bootError);
+  const splashReady = useSplashReady(authDone);
   useEffect(() => {
     boot();
   }, [boot]);
   return (
-    <MotionConfig reducedMotion="user">
+    <>
       <Suspense fallback={<Loading />}>
         <OwnerApp />
       </Suspense>
-    </MotionConfig>
+      <Splash ready={splashReady} />
+    </>
   );
 }
 
 function RegisterRoot() {
   useTheme();
   return (
-    <MotionConfig reducedMotion="user">
-      <Suspense fallback={<Loading />}>
-        <RegisterApp />
-      </Suspense>
-    </MotionConfig>
+    <Suspense fallback={<Loading />}>
+      <RegisterApp />
+    </Suspense>
   );
+}
+
+const PUSH_EASE = "cubic-bezier(.32,.72,0,1)";
+
+/** Bitta tab: ildiz ekran + ichki sahifalar steki. Yopilayotgan sahifa 320 ms chiqish animatsiyasi bilan qoladi. */
+function TabStack({ t, active }: { t: Tab; active: boolean }) {
+  const stack = useNav((s) => s.stacks[t]);
+  const [leaving, setLeaving] = useState<StackEntry | null>(null);
+  const prev = useRef(stack);
+
+  // bo'yalishdan OLDIN ushlaymiz — aks holda bir kadr bo'sh qoladi
+  useLayoutEffect(() => {
+    const p = prev.current;
+    prev.current = stack;
+    const gone = p[p.length - 1];
+    if (stack.length < p.length && gone && !stack.some((e) => e.key === gone.key)) {
+      setLeaving(gone);
+      const tm = setTimeout(() => setLeaving(null), 320);
+      return () => clearTimeout(tm);
+    }
+  }, [stack]);
+
+  const items = leaving ? [...stack, leaving] : stack;
+  return (
+    <div className="absolute inset-0" style={{ visibility: active ? "visible" : "hidden" }} aria-hidden={!active}>
+      <div
+        className="absolute inset-0"
+        style={{ transform: stack.length ? "translateX(-28%)" : "none", opacity: stack.length ? 0.9 : 1, transition: `transform .35s ${PUSH_EASE}, opacity .35s` }}
+      >
+        <TabRoot tab={t} />
+      </div>
+      {items.map((e, i) => {
+        const out = e === leaving;
+        const under = !out && i < stack.length - 1;
+        return (
+          <div
+            key={e.key}
+            className={`absolute inset-0 bg-bg ${out ? "app-page-out" : "app-page-in"}`}
+            style={{ zIndex: 10 + i, boxShadow: "-1px 0 0 var(--line)", transform: under ? "translateX(-28%)" : undefined, transition: `transform .35s ${PUSH_EASE}` }}
+          >
+            {renderRoute(e.route)}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Saqlangan markazda joy bo'shasa (0 -> bor) — Island */
+function useSeatAlerts() {
+  const centers = useApp((s) => s.centers);
+  const favorites = useProfile((s) => s.favorites);
+  const notify = useApp((s) => s.notify);
+  const push = useNav((s) => s.push);
+  const prev = useRef(new Map<string, number[]>());
+  useEffect(() => {
+    for (const c of centers) {
+      const now = c.groups.map((g) => g.freeSeats);
+      const was = prev.current.get(c.id);
+      prev.current.set(c.id, now);
+      if (!was || !favorites.includes(c.id)) continue;
+      const gi = now.findIndex((n, i) => n > 0 && (was[i] ?? 0) <= 0);
+      if (gi >= 0) {
+        const g = c.groups[gi];
+        notify({ title: "Joy bo‘shadi!", text: `${c.name.replace(/^Namuna:\s*/, "")} · ${g.subject} · ${g.time.split("–")[0]}`, onTap: () => push({ name: "center", centerId: c.id }) });
+        break;
+      }
+    }
+  }, [centers, favorites, notify, push]);
 }
 
 function MainApp() {
@@ -145,7 +224,11 @@ function MainApp() {
   const boot = useApp((s) => s.boot);
   const bootError = useApp((s) => s.bootError);
   const centersReady = useApp((s) => s.centersStatus === "ready");
+  const authDone = useApp((s) => !!s.backend || !!s.bootError);
+  const splashReady = useSplashReady(authDone);
+  const [onboarding, setOnboarding] = useState(shouldShowOnboarding);
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set(["home"]));
+  useSeatAlerts();
 
   useEffect(() => {
     boot();
@@ -174,41 +257,15 @@ function MainApp() {
     );
 
   return (
-    <MotionConfig reducedMotion="user">
+    <>
       <div className="relative h-full overflow-hidden" style={{ height: "var(--vh)" }}>
-        {(["home", "map", "chat", "profile"] as Tab[]).map((t) =>
-          visited.has(t) ? (
-            <div key={t} className="absolute inset-0" style={{ visibility: t === tab ? "visible" : "hidden" }} aria-hidden={t !== tab}>
-              <motion.div
-                className="absolute inset-0"
-                animate={{ x: t === tab && stacks[t].length ? "-28%" : 0, opacity: t === tab && stacks[t].length ? 0.9 : 1 }}
-                transition={pushTransition}
-              >
-                <TabRoot tab={t} />
-              </motion.div>
-              <AnimatePresence initial={false}>
-                {stacks[t].map((e, i) => (
-                  <motion.div
-                    key={e.key}
-                    className="absolute inset-0 bg-bg"
-                    style={{ zIndex: 10 + i, boxShadow: "-1px 0 0 var(--line)" }}
-                    initial={{ x: "100%" }}
-                    animate={{ x: i === stacks[t].length - 1 ? 0 : "-28%" }}
-                    exit={{ x: "100%" }}
-                    transition={pushTransition}
-                  >
-                    {renderRoute(e.route)}
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          ) : null
-        )}
+        {(["home", "map", "chat", "profile"] as Tab[]).map((t) => (visited.has(t) ? <TabStack key={t} t={t} active={t === tab} /> : null))}
         <TabBar />
-        <Toast />
-        <InstallPrompt />
+        {!onboarding && <InstallPrompt />}
         <OfflineBanner />
       </div>
-    </MotionConfig>
+      {splashReady && onboarding && <Onboarding onDone={() => setOnboarding(false)} />}
+      <Splash ready={splashReady} />
+    </>
   );
 }

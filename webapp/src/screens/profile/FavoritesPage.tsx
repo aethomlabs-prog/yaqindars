@@ -1,6 +1,6 @@
-import { Heart } from "lucide-react";
+import { EmptyState } from "../../components/motion";
 import { CenterRow } from "../../components/cards";
-import { EmptyState } from "../../components/ios/controls";
+
 import { Page } from "../../components/ios/Page";
 import { distanceKm } from "../../lib/geo";
 import { useApp, useOrigin, useProfile } from "../../store/app";
@@ -30,7 +30,7 @@ export function FavoritesPage() {
           ))}
         </div>
       ) : (
-        <EmptyState icon={<Heart size={26} />} text="Yoqqan markazlarni ♡ tugmasi bilan saqlang — ular shu yerda turadi." action="Markazlarni ko‘rish" onAction={() => setTab("home")} />
+        <EmptyState kind="saved" text="Yoqqan markazlarni ♡ tugmasi bilan saqlang — ular shu yerda turadi." action={{ label: "Markazlarni ko‘rish", onClick: () => setTab("home") }} />
       )}
     </Page>
   );

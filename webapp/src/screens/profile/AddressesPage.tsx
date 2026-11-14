@@ -1,11 +1,11 @@
 /* Saqlangan manzillar (Uy, Maktab…): masofa shu nuqtalardan hisoblanadi. */
 import { Check, Home, MapPin, Plus, School, Trash2 } from "lucide-react";
+import { EmptyState, Skeleton } from "../../components/motion";
 import { lazy, Suspense, useState } from "react";
-import { Button, Chip, EmptyState } from "../../components/ios/controls";
+import { Button, Chip } from "../../components/ios/controls";
 import { Row, Section } from "../../components/ios/Grouped";
 import { NavIconButton, Page } from "../../components/ios/Page";
 import { Sheet } from "../../components/ios/Sheet";
-import { Spinner } from "../../components/ios/Spinner";
 import { RISHTON } from "../../lib/geo";
 import { haptic } from "../../lib/telegram";
 import type { Address, LatLng } from "../../lib/types";
@@ -55,9 +55,7 @@ function AddressEditor({ open, onClose, editing }: { open: boolean; onClose: () 
         <div className="h-[42vh] min-h-[240px] shrink-0">
           <Suspense
             fallback={
-              <div className="flex h-full items-center justify-center rounded-card bg-card2 text-ink2">
-                <Spinner />
-              </div>
+              <Skeleton w="100%" h={9999} r={20} style={{ height: "100%" }} />
             }
           >
             {open && <MapPicker initial={pos} onChange={setPos} />}
@@ -144,7 +142,7 @@ export function AddressesPage() {
           ))}
         </Section>
       ) : (
-        <EmptyState icon={<MapPin size={26} />} text="Uy yoki maktab manzilini qo‘shing — masofa aynan shu joydan hisoblanadi." action="Manzil qo‘shish" onAction={() => open(null)} />
+        <EmptyState kind="saved" title="Manzillar yo‘q" text="Uy yoki maktab manzilini qo‘shing — masofa aynan shu joydan hisoblanadi." action={{ label: "Manzil qo‘shish", onClick: () => open(null) }} />
       )}
       {addresses.length > 0 && !editMode && (
         <div className="mx-4">

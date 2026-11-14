@@ -1,0 +1,178 @@
+/* =========================================================
+   YaqinDars — motion UI. Faqat transform / opacity animatsiyalar.
+   Ranglar Telegram mavzusidan olinadi (yorug‘ / qorong‘i).
+   ========================================================= */
+:root{
+  --yd-blue:#1E6FD9; --yd-navy:#0F3D7A; --yd-green:#22B573; --yd-green-d:#13804F;
+  --yd-gold:#F5B700; --yd-coral:#F25C3B;
+  --yd-bg:var(--tg-theme-secondary-bg-color,#F2F2F7);
+  --yd-card:var(--tg-theme-section-bg-color,var(--tg-theme-bg-color,#FFFFFF));
+  --yd-text:var(--tg-theme-text-color,#14213D);
+  --yd-muted:var(--tg-theme-hint-color,#6B7280);
+  --yd-line:rgba(127,127,127,.18);
+  --yd-ease:cubic-bezier(.2,.8,.2,1);
+  --yd-spring:cubic-bezier(.3,1.5,.5,1);
+}
+
+/* umumiy tugma */
+.yd-btn{height:50px;width:100%;border:0;border-radius:14px;background:var(--yd-blue);color:#fff;font:inherit;font-size:17px;font-weight:600;cursor:pointer;transition:transform .12s}
+.yd-btn:active{transform:scale(.97)}
+.yd-btn-ghost{width:auto;height:44px;padding:0 20px;background:transparent;color:var(--yd-blue);box-shadow:inset 0 0 0 1.5px var(--yd-blue)}
+
+/* ---------- 1. SPLASH ---------- */
+.yd-splash{position:fixed;inset:0;z-index:9999;background:var(--yd-blue);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .4s,transform .4s var(--yd-ease)}
+.yd-splash.is-out{opacity:0;transform:scale(1.04);pointer-events:none}
+.yd-splash-pin{animation:yd-drop .7s var(--yd-spring) both}
+.yd-splash-dot{transform-box:fill-box;transform-origin:center;animation:yd-pop .4s .55s var(--yd-spring) both}
+.yd-splash-word{color:#fff;font-weight:900;font-size:30px;letter-spacing:-.5px;animation:yd-rise .5s .35s var(--yd-ease) both}
+.yd-splash-bar{width:120px;height:4px;border-radius:2px;background:rgba(255,255,255,.25);overflow:hidden;margin-top:18px;animation:yd-fade .3s .6s both}
+.yd-splash-bar i{display:block;width:40%;height:100%;border-radius:2px;background:#fff;animation:yd-load 1.1s .6s ease-in-out infinite}
+
+/* ---------- 2. SUCCESS ---------- */
+.yd-overlay{position:fixed;inset:0;z-index:1000;background:rgba(10,20,40,.45);display:flex;align-items:flex-end;animation:yd-fade .2s both}
+.yd-sheet{width:100%;background:var(--yd-card);color:var(--yd-text);border-radius:26px 26px 0 0;padding:28px 20px calc(20px + env(safe-area-inset-bottom));box-sizing:border-box;animation:yd-up .38s var(--yd-ease) both}
+.yd-success{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px}
+.yd-success-art{position:relative;width:120px;height:120px;margin-bottom:6px}
+.yd-success-ring{fill:var(--yd-green);opacity:.15;transform-origin:60px 60px;animation:yd-ring 1.6s .3s ease-out both}
+.yd-success-disc{fill:var(--yd-green);transform-origin:60px 60px;animation:yd-pop .45s .05s var(--yd-spring) both}
+.yd-success-check{fill:none;stroke:#fff;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:70;stroke-dashoffset:70;animation:yd-draw .4s .3s ease-out forwards}
+.yd-conf{position:absolute;inset:0;pointer-events:none}
+.yd-conf i{position:absolute;left:50%;top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;background:var(--c);opacity:0;animation:yd-conf .9s ease-out both}
+.yd-success-title{margin:4px 0 0;font-size:24px;font-weight:800}
+.yd-success-text{margin:0;color:var(--yd-muted);font-size:15px}
+.yd-success-card{width:100%;margin:14px 0 18px;padding:4px 16px;border-radius:16px;background:var(--yd-bg);text-align:left;animation:yd-rise .4s .45s var(--yd-ease) both}
+.yd-success-card div{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--yd-line)}
+.yd-success-card div:last-child{border-bottom:0}
+.yd-success-card dt{color:var(--yd-muted);font-size:14px}
+.yd-success-card dd{margin:0;font-weight:600;font-size:14px;text-align:right}
+
+/* ---------- 3. EMPTY STATE ---------- */
+.yd-empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:40px 28px;color:var(--yd-text)}
+.yd-empty-art{width:132px;height:110px;margin-bottom:8px;animation:yd-rise .45s var(--yd-ease) both}
+.yd-empty-art svg{width:100%;height:100%}
+.yd-empty h3{margin:0;font-size:18px;font-weight:700}
+.yd-empty p{margin:0 0 12px;color:var(--yd-muted);font-size:15px;max-width:280px}
+.yd-es-bg{fill:var(--yd-blue);opacity:.1}
+.yd-es-line{fill:none;stroke:var(--yd-blue);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+.yd-es-accent{fill:var(--yd-green)}
+.yd-es-accent-s{stroke:var(--yd-green)}
+.yd-es-float{animation:yd-float 3s ease-in-out infinite}
+.yd-es-late{animation-delay:-1.5s}
+.yd-es-pulse{transform-box:fill-box;transform-origin:center;animation:yd-breathe 2s ease-in-out infinite}
+.yd-es-beat{transform-box:fill-box;transform-origin:center;animation:yd-beat 1.6s ease-in-out infinite}
+
+/* ---------- 4. MAP PINS ---------- */
+.yd-pin{background:none;border:0}
+.yd-pin svg{display:block;position:relative;transform-origin:50% 100%;filter:drop-shadow(0 2px 3px rgba(15,61,122,.35));animation:yd-pin-in .35s var(--yd-spring) both}
+.yd-pin svg path{stroke:#fff;stroke-width:6}
+.yd-pin-free svg path{fill:var(--yd-blue)}
+.yd-pin-full svg path{fill:#9AA5B8}
+.yd-pin-vip svg path{fill:var(--yd-gold)}
+.yd-pin-ring{position:absolute;left:50%;bottom:-2px;width:22px;height:10px;margin-left:-11px;border-radius:50%;background:var(--yd-green);opacity:0}
+.yd-pin-free .yd-pin-ring,.yd-pin-vip .yd-pin-ring{animation:yd-ground 1.8s ease-out infinite}
+.yd-pin-vip svg{animation:yd-pin-in .35s var(--yd-spring) both,yd-glow 2.4s 1s ease-in-out infinite}
+.yd-pin.is-sel svg{animation:yd-select .45s var(--yd-spring) both}
+.yd-pin.is-sel{z-index:1000!important}
+.yd-cluster{background:none;border:0}
+.yd-cluster span{display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:50%;background:var(--yd-blue);color:#fff;font-weight:800;font-size:15px;box-shadow:0 0 0 6px rgba(30,111,217,.22),0 4px 10px rgba(15,61,122,.3);animation:yd-pop .35s var(--yd-spring) both}
+
+/* ---------- 5. ISLAND TOAST ---------- */
+.yd-island{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 10px);z-index:2000;display:flex;align-items:center;gap:12px;width:min(92vw,380px);min-height:56px;padding:10px 18px;box-sizing:border-box;border-radius:28px;background:#0B0B0F;color:#fff;cursor:pointer;
+  transform:translate(-50%,-12px) scale(.35,.6);opacity:0;pointer-events:none;transition:transform .45s var(--yd-spring),opacity .25s}
+.yd-island.is-open{transform:translate(-50%,0) scale(1);opacity:1;pointer-events:auto}
+.yd-island-dot{width:12px;height:12px;border-radius:6px;flex:none;background:var(--yd-green);box-shadow:0 0 0 5px rgba(34,181,115,.25)}
+.yd-island-info .yd-island-dot{background:var(--yd-blue);box-shadow:0 0 0 5px rgba(30,111,217,.3)}
+.yd-island-error .yd-island-dot{background:var(--yd-coral);box-shadow:0 0 0 5px rgba(242,92,59,.3)}
+.yd-island-body{display:flex;flex-direction:column;min-width:0;opacity:0;transition:opacity .2s}
+.yd-island.is-open .yd-island-body{opacity:1;transition-delay:.15s}
+.yd-island-body b{font-size:15px;font-weight:700}
+.yd-island-body small{font-size:13px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- 6. TAB ICONS ---------- */
+.yd-tab{display:block;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;color:var(--yd-muted);transform-origin:50% 90%}
+.yd-tab.is-active{color:var(--yd-blue);fill:currentColor;fill-opacity:.16}
+.yd-tab-home.is-active{animation:yd-hop .42s var(--yd-spring)}
+.yd-tab-map.is-active{animation:yd-pinhop .5s var(--yd-spring)}
+.yd-tab-chat.is-active{animation:yd-pop .4s var(--yd-spring)}
+.yd-tab-profile.is-active{animation:yd-nod .45s ease-in-out}
+
+/* ---------- 7. SKELETON ---------- */
+.yd-skel{display:block;position:relative;overflow:hidden;background:var(--yd-line)}
+.yd-skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);animation:yd-shimmer 1.3s infinite}
+.yd-skel-list{display:flex;flex-direction:column;gap:12px;padding:12px 16px}
+.yd-skel-card{display:flex;gap:14px;padding:14px;border-radius:18px;background:var(--yd-card)}
+.yd-skel-lines{flex:1;display:flex;flex-direction:column;gap:9px;padding-top:2px}
+
+/* ---------- 8. SEAT CHIP ---------- */
+.yd-seat{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;background:#E4F6EC;color:var(--yd-green-d);font-size:13px;font-weight:700;white-space:nowrap}
+.yd-seat.is-full{background:#FDE7E2;color:#B93A1E}
+.yd-seat-dot{width:7px;height:7px;border-radius:4px;background:var(--yd-green);animation:yd-breathe 1.8s ease-in-out infinite}
+.yd-roll{position:relative;display:inline-block;height:1.2em;line-height:1.2em;overflow:hidden;font-variant-numeric:tabular-nums}
+.yd-roll b{display:block;font-weight:800}
+.yd-roll-out{position:absolute;inset:0;animation:yd-roll-out-down .35s var(--yd-ease) forwards}
+.yd-roll-out.up{animation-name:yd-roll-out-up}
+.yd-roll-in{animation:yd-roll-in-down .35s var(--yd-ease) both}
+.yd-roll-in.up{animation-name:yd-roll-in-up}
+
+/* ---------- 9. PULL TO REFRESH ---------- */
+.yd-ptr{position:relative;height:100%;overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
+.yd-ptr-ind{position:absolute;left:50%;top:0;z-index:2;width:44px;height:44px;border-radius:22px;background:var(--yd-card);box-shadow:0 4px 14px rgba(15,61,122,.18);display:flex;align-items:center;justify-content:center;pointer-events:none}
+.yd-ptr-ind svg path{fill:var(--yd-blue)}
+.yd-ptr-ind.is-busy svg{animation:yd-bounce .55s ease-in-out infinite}
+
+/* ---------- 10. ONBOARDING ---------- */
+.yd-ob{position:fixed;inset:0;z-index:3000;background:var(--yd-card);color:var(--yd-text);display:flex;flex-direction:column;padding:calc(16px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom));box-sizing:border-box;animation:yd-fade .3s both}
+.yd-ob-skip{align-self:flex-end;height:40px;padding:0 6px;border:0;background:none;color:var(--yd-muted);font:inherit;font-size:15px;cursor:pointer}
+.yd-ob-viewport{flex:1;overflow:hidden}
+.yd-ob-track{display:flex;height:100%;transition:transform .45s var(--yd-ease)}
+.yd-ob-slide{flex:0 0 100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;padding:0 8px;box-sizing:border-box}
+.yd-ob-art{width:min(100%,300px);aspect-ratio:220/180;margin-bottom:18px}
+.yd-ob-art svg{width:100%;height:100%}
+.yd-ob-slide h2{margin:0;font-size:26px;font-weight:800;letter-spacing:-.3px}
+.yd-ob-slide p{margin:0;color:var(--yd-muted);font-size:16px;line-height:1.45;max-width:320px}
+.yd-ob-slide h2,.yd-ob-slide p{opacity:0;transform:translateY(10px)}
+.yd-ob-slide.is-on h2{opacity:1;transform:none;transition:opacity .35s .15s,transform .45s .15s var(--yd-ease)}
+.yd-ob-slide.is-on p{opacity:1;transform:none;transition:opacity .35s .25s,transform .45s .25s var(--yd-ease)}
+.yd-ob-radar{fill:var(--yd-blue);opacity:.15;transform-box:fill-box;transform-origin:center}
+.is-on .yd-ob-radar{animation:yd-ring 2s ease-out infinite}
+.yd-ob-pin{opacity:0;transform-box:fill-box;transform-origin:50% 100%}
+.is-on .yd-ob-pin{animation:yd-drop .6s var(--yd-spring) both}
+.is-on .yd-ob-pin.d2{animation-delay:.2s}.is-on .yd-ob-pin.d3{animation-delay:.4s}
+.is-on .yd-ob-blink{animation:yd-breathe 1.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.yd-ob-check{stroke-dasharray:80;stroke-dashoffset:80}
+.is-on .yd-ob-check{animation:yd-draw .5s .2s ease-out forwards}
+.is-on .yd-ob-glow{animation:yd-breathe 2.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.yd-ob-dots{display:flex;justify-content:center;gap:6px;margin:16px 0 18px}
+.yd-ob-dots span{width:7px;height:7px;border-radius:4px;background:var(--yd-text);opacity:.2;transition:width .25s,opacity .25s}
+.yd-ob-dots span.on{width:22px;opacity:.85;background:var(--yd-blue)}
+
+/* ---------- KEYFRAMES ---------- */
+@keyframes yd-fade{from{opacity:0}}
+@keyframes yd-up{from{transform:translateY(40px);opacity:0}}
+@keyframes yd-rise{from{opacity:0;transform:translateY(10px)}}
+@keyframes yd-drop{0%{opacity:0;transform:translateY(-40px)}100%{opacity:1;transform:none}}
+@keyframes yd-pop{0%{transform:scale(0)}100%{transform:scale(1)}}
+@keyframes yd-load{0%{transform:translateX(-110%)}100%{transform:translateX(260%)}}
+@keyframes yd-draw{to{stroke-dashoffset:0}}
+@keyframes yd-ring{0%{transform:scale(.7);opacity:.35}100%{transform:scale(1.35);opacity:0}}
+@keyframes yd-conf{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(var(--x),calc(var(--y) + 40px)) rotate(var(--r))}}
+@keyframes yd-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes yd-breathe{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.25);opacity:.7}}
+@keyframes yd-beat{0%,100%{transform:scale(1)}15%{transform:scale(1.12)}30%{transform:scale(1)}45%{transform:scale(1.08)}}
+@keyframes yd-pin-in{0%{opacity:0;transform:translateY(-16px) scale(.6)}100%{opacity:1;transform:none}}
+@keyframes yd-ground{0%{transform:scale(.4);opacity:.6}100%{transform:scale(2.4);opacity:0}}
+@keyframes yd-glow{0%,100%{filter:drop-shadow(0 2px 3px rgba(15,61,122,.35))}50%{filter:drop-shadow(0 0 8px rgba(245,183,0,.85))}}
+@keyframes yd-select{0%{transform:scale(1)}100%{transform:scale(1.35) translateY(-4px)}}
+@keyframes yd-hop{0%,100%{transform:none}40%{transform:translateY(-4px)}}
+@keyframes yd-pinhop{0%{transform:none}35%{transform:translateY(-6px)}60%{transform:translateY(0) scale(1.1,.9)}100%{transform:none}}
+@keyframes yd-nod{0%,100%{transform:none}30%{transform:rotate(-8deg)}60%{transform:rotate(6deg)}}
+@keyframes yd-shimmer{100%{transform:translateX(100%)}}
+@keyframes yd-roll-in-down{from{transform:translateY(-100%)}to{transform:none}}
+@keyframes yd-roll-in-up{from{transform:translateY(100%)}to{transform:none}}
+@keyframes yd-roll-out-down{to{transform:translateY(100%)}}
+@keyframes yd-roll-out-up{to{transform:translateY(-100%)}}
+@keyframes yd-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+
+@media (prefers-reduced-motion:reduce){
+  [class^="yd-"],[class^="yd-"] *,[class*=" yd-"],[class*=" yd-"] *{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}

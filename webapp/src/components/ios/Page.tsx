@@ -2,7 +2,7 @@
 import { ChevronLeft } from "lucide-react";
 import { useCallback, useRef, useState, type ReactNode, type UIEvent } from "react";
 import { useNav } from "../../store/nav";
-import { PullToRefresh } from "./PullToRefresh";
+import { PullToRefresh } from "../motion";
 
 interface Props {
   title: string;
@@ -31,8 +31,8 @@ export function Page({ title, large = false, largeContent, back, backLabel = "Or
   const pop = useNav((s) => s.pop);
 
   const onScroll = useCallback(
-    (e: UIEvent<HTMLDivElement>) => {
-      const top = e.currentTarget.scrollTop;
+    (e: UIEvent<HTMLElement>) => {
+      const top = (e.target as HTMLElement).scrollTop;
       cancelAnimationFrame(raf.current);
       raf.current = requestAnimationFrame(() => {
         setScrolled(top > 2);
@@ -40,6 +40,18 @@ export function Page({ title, large = false, largeContent, back, backLabel = "Or
       });
     },
     [large]
+  );
+
+  const content = (
+    <>
+      {large && (
+        <div className="px-5 pb-2 pt-1">
+          {largeContent ?? <h1 className="text-large-title">{title}</h1>}
+        </div>
+      )}
+      {below}
+      {children}
+    </>
   );
 
   return (
@@ -68,25 +80,28 @@ export function Page({ title, large = false, largeContent, back, backLabel = "Or
         </div>
       </header>
 
-      <div
-        ref={(n) => {
-          el.current = n;
-          scrollRef?.(n);
-        }}
-        onScroll={onScroll}
-        className="scroll-y no-scrollbar relative flex-1"
-        style={{ paddingTop: "calc(44px + var(--safe-top))", paddingBottom: tabbar ? "calc(var(--tabbar-h) + 24px)" : "calc(24px + var(--safe-bottom))" }}
-      >
-        <PullToRefresh onRefresh={onRefresh} scrollEl={el}>
-          {large && (
-            <div className="px-5 pb-2 pt-1">
-              {largeContent ?? <h1 className="text-large-title">{title}</h1>}
+      {onRefresh ? (
+        // Pastga tortib yangilash (motion/PullToRefresh o‘zi scroll konteyner) — scroll’ni capture orqali kuzatamiz
+        <div className="relative min-h-0 flex-1" onScrollCapture={onScroll}>
+          <PullToRefresh onRefresh={onRefresh}>
+            <div style={{ paddingTop: "calc(44px + var(--safe-top))", paddingBottom: tabbar ? "calc(var(--tabbar-h) + 24px)" : "calc(24px + var(--safe-bottom))" }}>
+              {content}
             </div>
-          )}
-          {below}
-          {children}
-        </PullToRefresh>
-      </div>
+          </PullToRefresh>
+        </div>
+      ) : (
+        <div
+          ref={(n) => {
+            el.current = n;
+            scrollRef?.(n);
+          }}
+          onScroll={onScroll}
+          className="scroll-y no-scrollbar relative flex-1"
+          style={{ paddingTop: "calc(44px + var(--safe-top))", paddingBottom: tabbar ? "calc(var(--tabbar-h) + 24px)" : "calc(24px + var(--safe-bottom))" }}
+        >
+          {content}
+        </div>
+      )}
       {bottom}
     </div>
   );

@@ -14,7 +14,6 @@ export default defineConfig({
         manualChunks(id) {
           if (id.includes("node_modules/leaflet") || id.includes("react-leaflet") || id.includes("@react-leaflet")) return "map";
           if (id.includes("node_modules/@firebase") || id.includes("node_modules/firebase")) return "firebase";
-          if (id.includes("node_modules/framer-motion")) return "motion";
           if (id.includes("node_modules/react") || id.includes("node_modules/scheduler")) return "react";
         }
       }

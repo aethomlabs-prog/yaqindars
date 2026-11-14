@@ -1,8 +1,8 @@
 /* Arizalar: holat bosqichlari (yuborildi → ko‘rildi → qabul), sinov darsi vaqti. */
-import { motion } from "framer-motion";
-import { CalendarClock, ClipboardList } from "lucide-react";
+import { EmptyState } from "../../components/motion";
+import { CalendarClock } from "lucide-react";
 import { SubjectIcon } from "../../components/brand";
-import { EmptyState } from "../../components/ios/controls";
+
 import { listItem } from "../../components/ios/motion";
 import { Page } from "../../components/ios/Page";
 import { fmtDayLabel, fmtListTime, fmtTime } from "../../lib/format";
@@ -37,7 +37,7 @@ export function ApplicationsPage() {
   const setTab = useNav((s) => s.setTab);
 
   return (
-    <Page title="Arizalarim" back backLabel="Profil">
+    <Page title="Arizalarim" back backLabel="Profil" onRefresh={() => useApp.getState().loadCenters()}>
       {apps.length ? (
         <div className="mx-4 mt-3 space-y-2.5">
           {apps.map((a, i) => {
@@ -45,7 +45,7 @@ export function ApplicationsPage() {
             const child = children.find((c) => c.id === a.childId);
             const [subject, ...rest] = a.group.split(" · ");
             return (
-              <motion.button key={a.id} {...listItem(i)} onClick={() => push({ name: "center", centerId: a.centerId })} className="focus-ring pressable block w-full rounded-card bg-card p-4 text-left shadow-card">
+              <button key={a.id} {...listItem(i)} onClick={() => push({ name: "center", centerId: a.centerId })} className="focus-ring pressable block w-full rounded-card bg-card p-4 text-left shadow-card">
                 <div className="flex items-start gap-3">
                   <SubjectIcon name={subject} size={44} />
                   <div className="min-w-0 flex-1">
@@ -68,13 +68,13 @@ export function ApplicationsPage() {
                     <CalendarClock size={17} aria-hidden /> Sinov darsi: {fmtDayLabel(a.trialMs)}, {fmtTime(a.trialMs)}
                   </div>
                 )}
-              </motion.button>
+              </button>
             );
           })}
           {!authed && <p className="px-2 pt-2 text-center text-footnote text-ink3">Holat o‘zgarishlari Telegram ichida ochilganda yangilanadi.</p>}
         </div>
       ) : (
-        <EmptyState icon={<ClipboardList size={26} />} text="Hali ariza yubormagansiz. Markaz sahifasida «Bepul sinov darsi» tugmasini bosing." action="Markazlarni ko‘rish" onAction={() => setTab("home")} />
+        <EmptyState kind="applications" text="Hali ariza yubormagansiz. Markaz sahifasida «Bepul sinov darsi» tugmasini bosing." action={{ label: "Markazlarni ko‘rish", onClick: () => setTab("home") }} />
       )}
     </Page>
   );

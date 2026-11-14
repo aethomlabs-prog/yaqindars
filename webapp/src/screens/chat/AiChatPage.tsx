@@ -1,9 +1,9 @@
 /* AI yordamchi: erkin savol → javob + mos markaz kartochkalari. LLM bo‘lmasa — qoidaga asoslangan qidiruv. */
 import { Sparkles, Trash2 } from "lucide-react";
+import { SeatChip } from "../../components/motion";
 import { Fragment, useState } from "react";
 import { Bubble, Composer, DaySeparator, newDay, TypingDots, useStickToBottom } from "../../components/chat";
 import { SubjectIcon } from "../../components/brand";
-import { SeatChip } from "../../components/ios/controls";
 import { NavIconButton, Page } from "../../components/ios/Page";
 import { fmtSum } from "../../lib/format";
 import { distanceKm, formatDistance } from "../../lib/geo";
@@ -27,7 +27,7 @@ function CenterCard({ id }: { id: string }) {
           {formatDistance(distanceKm(pos, c))} · {fmtSum(Math.min(...c.groups.map((g) => g.price)))} dan
         </span>
       </span>
-      <SeatChip n={free} compact />
+      <SeatChip count={free} />
     </button>
   );
 }

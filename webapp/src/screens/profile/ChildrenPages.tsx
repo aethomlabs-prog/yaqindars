@@ -1,8 +1,9 @@
 /* Farzandlar ro‘yxati va tahrirlash formasi (ariza formasida «Kim uchun?» sifatida chiqadi). */
-import { Baby, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
+import { EmptyState } from "../../components/motion";
 import { useState } from "react";
 import { SubjectIcon } from "../../components/brand";
-import { Avatar, Button, Chip, EmptyState } from "../../components/ios/controls";
+import { Avatar, Button, Chip } from "../../components/ios/controls";
 import { Row, Section } from "../../components/ios/Grouped";
 import { NavIconButton, Page } from "../../components/ios/Page";
 import { SUBJECTS } from "../../lib/match";
@@ -38,7 +39,7 @@ export function ChildrenPage() {
           ))}
         </Section>
       ) : (
-        <EmptyState icon={<Baby size={26} />} text="Farzandingizni qo‘shsangiz, arizalar tezroq to‘ldiriladi va AI yoshiga mos markazlarni tavsiya qiladi." action="Farzand qo‘shish" onAction={() => push({ name: "childEdit", childId: null })} />
+        <EmptyState kind="saved" title="Farzandlar qo‘shilmagan" text="Farzandingizni qo‘shsangiz, arizalar tezroq to‘ldiriladi va AI yoshiga mos markazlarni tavsiya qiladi." action={{ label: "Farzand qo‘shish", onClick: () => push({ name: "childEdit", childId: null }) }} />
       )}
     </Page>
   );

@@ -1,10 +1,10 @@
 /* Markaz / repetitor sahifasi: tez amallar, guruhlar, ma’lumot, sharhlar, ariza. */
-import { motion } from "framer-motion";
+import { EmptyState, SeatChip } from "../../components/motion";
 import { AlertTriangle, BellPlus, Clock, Heart, MapPin, MessageCircle, Navigation, Phone, Share, Star, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Rating } from "../../components/cards";
 import { SubjectIcon } from "../../components/brand";
-import { Avatar, Button, EmptyState, SeatChip, VipBadge } from "../../components/ios/controls";
+import { Avatar, Button, VipBadge } from "../../components/ios/controls";
 import { Section } from "../../components/ios/Grouped";
 import { listItem } from "../../components/ios/motion";
 import { Page } from "../../components/ios/Page";
@@ -75,7 +75,7 @@ export function CenterPage({ centerId }: { centerId: string }) {
   if (!c)
     return (
       <Page title="Markaz" back tabbar={false}>
-        {status === "ready" ? <EmptyState icon={<MapPin size={26} />} text="Markaz topilmadi yoki o‘chirilgan." /> : <div className="h-40" />}
+        {status === "ready" ? <EmptyState kind="search" title="Markaz topilmadi" text="Markaz topilmadi yoki o‘chirilgan." /> : <div className="h-40" />}
       </Page>
     );
 
@@ -144,9 +144,9 @@ export function CenterPage({ centerId }: { centerId: string }) {
           }}
           className="focus-ring flex h-11 w-11 items-center justify-center rounded-full pressable"
         >
-          <motion.span key={String(fav)} initial={{ scale: 0.6 }} animate={{ scale: 1 }}>
+          <span key={String(fav)} style={{ display: "inline-flex", animation: "yd-pop .35s var(--yd-spring) both" }}>
             <Heart size={23} className={fav ? "text-[#FF3B30]" : "text-tint"} fill={fav ? "#FF3B30" : "none"} />
-          </motion.span>
+          </span>
         </button>
       }
       bottom={
@@ -205,7 +205,7 @@ export function CenterPage({ centerId }: { centerId: string }) {
         <h2 className="mb-2 mt-7 px-5 text-title">Guruhlar</h2>
         <div className="mx-4 space-y-2.5">
           {c.groups.map((g, i) => (
-            <motion.div key={i} {...listItem(i)} className="rounded-card bg-card p-4 shadow-card">
+            <div key={i} {...listItem(i)} className="rounded-card bg-card p-4 shadow-card">
               <div className="flex items-start gap-3">
                 <SubjectIcon name={g.subject} size={44} />
                 <div className="min-w-0 flex-1">
@@ -217,7 +217,7 @@ export function CenterPage({ centerId }: { centerId: string }) {
                     <Clock size={13} aria-hidden /> {g.days.join(", ")} · {g.time}
                   </div>
                   <div className="mt-2">
-                    <SeatChip n={g.freeSeats} />
+                    <SeatChip count={g.freeSeats} />
                   </div>
                 </div>
               </div>
@@ -237,7 +237,7 @@ export function CenterPage({ centerId }: { centerId: string }) {
                   </>
                 )}
               </div>
-            </motion.div>
+            </div>
           ))}
           {!c.groups.length && <p className="px-1 text-subhead text-ink2">Hozircha guruhlar qo‘shilmagan.</p>}
         </div>

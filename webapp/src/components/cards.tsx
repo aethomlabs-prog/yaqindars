@@ -1,10 +1,10 @@
-import { motion } from "framer-motion";
 import { Star } from "lucide-react";
 import { fmtSum } from "../lib/format";
 import { formatDistance } from "../lib/geo";
 import type { Center } from "../lib/types";
 import { useNav } from "../store/nav";
-import { Avatar, SeatChip, VipBadge } from "./ios/controls";
+import { Avatar, VipBadge } from "./ios/controls";
+import { SeatChip } from "./motion";
 import { listItem } from "./ios/motion";
 import { SubjectIcon } from "./brand";
 
@@ -23,7 +23,7 @@ export function Rating({ value, count }: { value: number | null; count?: number 
 export function CenterRow({ c, km, free, minPrice, subjects, i = 0, onOpen }: { c: Center; km: number; free: number; minPrice: number; subjects: string[]; i?: number; onOpen?: () => void }) {
   const push = useNav((s) => s.push);
   return (
-    <motion.button
+    <button
       {...listItem(i)}
       onClick={onOpen ?? (() => push({ name: "center", centerId: c.id }))}
       className="focus-ring pressable flex w-full gap-3 rounded-card bg-card p-3.5 text-left shadow-card"
@@ -39,10 +39,10 @@ export function CenterRow({ c, km, free, minPrice, subjects, i = 0, onOpen }: { 
         </div>
         <div className="mt-2 flex items-center justify-between gap-2">
           <span className="tnum text-subhead font-semibold">{fmtSum(minPrice)} dan</span>
-          <SeatChip n={free} />
+          <SeatChip count={free} />
         </div>
       </div>
-    </motion.button>
+    </button>
   );
 }
 
@@ -57,7 +57,7 @@ export function FreeSeatCard({ c, groupIndex, km }: { c: Center; groupIndex: num
     >
       <div className="flex items-center justify-between">
         <SubjectIcon name={g.subject} size={40} />
-        <SeatChip n={g.freeSeats} compact />
+        <SeatChip count={g.freeSeats} />
       </div>
       <span className="mt-3 truncate text-headline">{c.name}</span>
       <span className="mt-0.5 truncate text-footnote text-ink2">

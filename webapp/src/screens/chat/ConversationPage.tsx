@@ -1,10 +1,9 @@
 /* Markaz bilan suhbat (real vaqt). */
-import { MessageCircle } from "lucide-react";
+import { EmptyState, SkeletonList } from "../../components/motion";
 import { Fragment, useEffect, useState } from "react";
 import { Bubble, Composer, DaySeparator, newDay, SystemNote, TypingDots, useStickToBottom } from "../../components/chat";
 import { Avatar } from "../../components/ios/controls";
 import { Page } from "../../components/ios/Page";
-import { Spinner } from "../../components/ios/Spinner";
 import type { Message } from "../../lib/types";
 import { useApp, useCenter } from "../../store/app";
 import { useNav } from "../../store/nav";
@@ -57,16 +56,9 @@ export function ConversationPage({ chatId }: { chatId: string }) {
     >
       <div className="px-3" style={{ paddingBottom: 56 }}>
         {msgs === null ? (
-          <div className="flex justify-center py-10 text-ink2">
-            <Spinner />
-          </div>
+          <SkeletonList count={3} />
         ) : msgs.length === 0 ? (
-          <div className="flex flex-col items-center px-8 py-14 text-center">
-            <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-fill text-ink2">
-              <MessageCircle size={26} />
-            </div>
-            <p className="text-subhead text-ink2">Savolingizni yozing — markaz Telegram orqali javob beradi.</p>
-          </div>
+          <EmptyState kind="chats" title="Hali xabar yo‘q" text="Savolingizni yozing — markaz Telegram orqali javob beradi" />
         ) : (
           msgs.map((m, i) => {
             const prev = msgs[i - 1];

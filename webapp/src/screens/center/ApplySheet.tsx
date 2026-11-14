@@ -1,10 +1,8 @@
 /* Bepul sinov darsiga ariza: guruh, farzand, ism, telefon, izoh. Telegram ichida — MainButton. */
-import { motion } from "framer-motion";
-import { CheckCircle2 } from "lucide-react";
+import { SeatChip, SuccessSheet } from "../../components/motion";
 import { useEffect, useState } from "react";
 import { SubjectIcon } from "../../components/brand";
-import { Button, Chip, SeatChip } from "../../components/ios/controls";
-import { spring } from "../../components/ios/motion";
+import { Button, Chip } from "../../components/ios/controls";
 import { Sheet } from "../../components/ios/Sheet";
 import { fmtSum, maskPhone, normalizePhone } from "../../lib/format";
 import { haptic, inTelegram, tgUser, useMainButton } from "../../lib/telegram";
@@ -50,7 +48,6 @@ export function ApplySheet({ center, groupIndex, open, onClose }: { center: Cent
   useEffect(() => {
     if (open) {
       setGi(groupIndex);
-      setDone(false);
       setTouched(false);
     }
   }, [open, groupIndex]);
@@ -74,8 +71,9 @@ export function ApplySheet({ center, groupIndex, open, onClose }: { center: Cent
       } catch {
         /* private rejim */
       }
-      haptic.success();
+      // Muvaffaqiyat: forma yopiladi, SuccessSheet (✓ + konfetti) chiqadi
       setDone(true);
+      onClose();
     } catch (e) {
       console.error(e);
       haptic.error();
@@ -85,48 +83,24 @@ export function ApplySheet({ center, groupIndex, open, onClose }: { center: Cent
     }
   };
 
-  useMainButton({ visible: open && !done && inTelegram, text: "Arizani yuborish", enabled: !busy, loading: busy, onClick: submit });
+  useMainButton({ visible: open && inTelegram, text: "Arizani yuborish", enabled: !busy, loading: busy, onClick: submit });
 
   return (
+    <>
     <Sheet
       open={open}
       onClose={onClose}
-      title={done ? undefined : "Sinov darsiga yozilish"}
-      tall={!done}
+      title="Sinov darsiga yozilish"
+      tall
       footer={
-        done ? (
-          <div className="space-y-2">
-            <Button
-              className="w-full"
-              onClick={() => {
-                onClose();
-                push({ name: "applications" }, "profile");
-              }}
-            >
-              Arizalarimni ko‘rish
-            </Button>
-            <Button kind="plain" className="w-full" onClick={onClose}>
-              Yopish
-            </Button>
-          </div>
-        ) : inTelegram ? undefined : (
+        inTelegram ? undefined : (
           <Button kind="green" className="w-full" loading={busy} onClick={submit}>
             Arizani yuborish
           </Button>
         )
       }
     >
-      {done ? (
-        <div className="flex flex-col items-center px-8 pb-4 pt-6 text-center">
-          <motion.div initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={spring}>
-            <CheckCircle2 size={72} strokeWidth={1.6} className="text-green" />
-          </motion.div>
-          <h2 className="mt-4 text-title">Ariza yuborildi</h2>
-          <p className="mt-2 text-subhead text-ink2">
-            {center.name} tez orada {phoneOk ? "telefon orqali" : ""} bog‘lanadi. Holatini «Arizalarim» bo‘limida kuzatishingiz mumkin.
-          </p>
-        </div>
-      ) : (
+      {(
         <div className="space-y-5 px-4 pb-4">
           <p className="px-1 text-subhead text-ink2">
             <span className="font-semibold text-ink">{center.name}</span> — birinchi dars bepul. Markaz siz bilan bog‘lanib, vaqtni tasdiqlaydi.
@@ -155,7 +129,7 @@ export function ApplySheet({ center, groupIndex, open, onClose }: { center: Cent
                         {x.days.join(", ")} · {x.time} · {fmtSum(x.price)}
                       </span>
                     </span>
-                    <SeatChip n={x.freeSeats} compact />
+                    <SeatChip count={x.freeSeats} />
                   </button>
                 );
               })}
@@ -210,5 +184,20 @@ export function ApplySheet({ center, groupIndex, open, onClose }: { center: Cent
         </div>
       )}
     </Sheet>
+    <SuccessSheet
+      open={done}
+      text={`${center.name.replace(/^Namuna:\s*/, "")} siz bilan tez orada bog‘lanadi`}
+      details={[
+        { label: "Markaz", value: center.name.replace(/^Namuna:\s*/, "") },
+        { label: "Guruh", value: g ? `${g.subject} · ${g.time.split("–")[0]}` : "—" },
+        { label: "Sinov darsi", value: "Markaz tasdiqlaydi" }
+      ]}
+      actionLabel="Arizalarimni ko‘rish"
+      onClose={() => {
+        setDone(false);
+        push({ name: "applications" }, "profile");
+      }}
+    />
+    </>
   );
 }

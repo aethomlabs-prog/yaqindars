@@ -1,9 +1,9 @@
-import { motion } from "framer-motion";
-import { CalendarClock, ChevronDown, MapPin, Navigation, WifiOff } from "lucide-react";
+import { EmptyState, SkeletonList } from "../../components/motion";
+import { CalendarClock, ChevronDown, MapPin, Navigation } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { FreeSeatCard, Rating, TutorRow } from "../../components/cards";
 import { SubjectIcon } from "../../components/brand";
-import { Button, EmptyState, SearchBar, Skeleton, VipBadge } from "../../components/ios/controls";
+import { Button, SearchBar, VipBadge } from "../../components/ios/controls";
 import { listItem } from "../../components/ios/motion";
 import { Page } from "../../components/ios/Page";
 import { fmtDayLabel, fmtSum, fmtTime } from "../../lib/format";
@@ -37,7 +37,7 @@ function TrialCard() {
   const { pos } = useOrigin();
   if (!next) return null;
   return (
-    <motion.div {...listItem(0)} className="mx-4 mt-5 overflow-hidden rounded-card bg-tint p-4 text-white">
+    <div {...listItem(0)} className="mx-4 mt-5 overflow-hidden rounded-card bg-tint p-4 text-white">
       <div className="flex items-center gap-2 text-footnote font-semibold uppercase tracking-wide opacity-80">
         <CalendarClock size={15} aria-hidden /> Sinov darsingiz
       </div>
@@ -54,7 +54,7 @@ function TrialCard() {
           <Navigation size={16} aria-hidden /> Yo‘l ko‘rsatish
         </button>
       )}
-    </motion.div>
+    </div>
   );
 }
 
@@ -203,28 +203,17 @@ export function HomeScreen() {
       <TrialCard />
 
       {status === "error" && (
-        <EmptyState icon={<WifiOff size={26} />} text="Ma’lumotlarni yuklab bo‘lmadi. Internetni tekshiring." action="Qayta urinish" onAction={loadCenters} />
+        <EmptyState kind="search" title="Yuklab bo‘lmadi" text="Ma’lumotlarni yuklab bo‘lmadi. Internetni tekshiring." action={{ label: "Qayta urinish", onClick: loadCenters }} />
       )}
 
       {(status === "loading" || status === "idle") && !centers.length && (
-        <>
-          <div className="mb-3 mt-7 px-5">
-            <Skeleton className="h-6 w-48" />
-          </div>
-          <div className="flex gap-3 overflow-hidden px-4">
-            {[0, 1].map((i) => (
-              <Skeleton key={i} className="h-[150px] w-[240px] shrink-0 rounded-card" />
-            ))}
-          </div>
-          <div className="mx-4 mt-7 space-y-3">
-            <Skeleton className="h-6 w-40" />
-            <Skeleton className="h-[140px] rounded-card" />
-          </div>
-        </>
+        <div className="mt-5">
+          <SkeletonList count={3} />
+        </div>
       )}
 
       {status === "ready" && !centers.length && (
-        <EmptyState icon={<MapPin size={26} />} text="Hozircha bu hududda markazlar yo‘q." action="Xaritani ochish" onAction={() => setTab("map")} />
+        <EmptyState kind="search" title="Markazlar yo‘q" text="Hozircha bu hududda markazlar yo‘q." action={{ label: "Xaritani ochish", onClick: () => setTab("map") }} />
       )}
 
       {free.length > 0 && (

@@ -1,8 +1,8 @@
 /* Chat tabi: tepada AI yordamchi, pastda markazlar bilan suhbatlar. */
-import { AnimatePresence, motion } from "framer-motion";
-import { MessageCircle, MinusCircle, Sparkles } from "lucide-react";
+import { EmptyState } from "../../components/motion";
+import { MinusCircle, Sparkles } from "lucide-react";
 import { useState } from "react";
-import { Avatar, CountBadge, EmptyState } from "../../components/ios/controls";
+import { Avatar, CountBadge } from "../../components/ios/controls";
 import { listItem } from "../../components/ios/motion";
 import { Page } from "../../components/ios/Page";
 import { fmtListTime } from "../../lib/format";
@@ -61,25 +61,20 @@ export function ChatListScreen() {
         <>
           <h2 className="mb-1.5 mt-6 px-8 text-[13px] uppercase tracking-[0.02em] text-ink2">Markazlar bilan</h2>
           <div className="mx-4 overflow-hidden rounded-card bg-card">
-            <AnimatePresence initial={false}>
               {chats.map((c, i) => {
                 const center = centers.find((x) => x.id === c.centerId);
                 return (
-                  <motion.div key={c.id} {...listItem(i)} exit={{ opacity: 0, height: 0 }} className="group flex items-center">
-                    <AnimatePresence>
-                      {editing && (
-                        <motion.button
-                          initial={{ width: 0, opacity: 0 }}
-                          animate={{ width: 44, opacity: 1 }}
-                          exit={{ width: 0, opacity: 0 }}
+                  <div key={c.id} {...listItem(i)} className="group flex items-center">
+                    <button
+                          tabIndex={editing ? 0 : -1}
+                          aria-hidden={!editing}
+                          style={{ width: editing ? 44 : 0, opacity: editing ? 1 : 0, transition: "width .25s var(--yd-ease), opacity .2s" }}
                           onClick={() => remove(c.id)}
                           aria-label={`${c.title} suhbatini o‘chirish`}
                           className="flex h-11 shrink-0 items-center justify-end overflow-hidden text-[#FF3B30]"
                         >
                           <MinusCircle size={22} fill="#FF3B30" color="white" />
-                        </motion.button>
-                      )}
-                    </AnimatePresence>
+                    </button>
                     <button
                       disabled={editing}
                       onClick={() => push({ name: "conversation", chatId: c.id })}
@@ -97,23 +92,17 @@ export function ChatListScreen() {
                         </span>
                       </span>
                     </button>
-                  </motion.div>
+                  </div>
                 );
               })}
-            </AnimatePresence>
           </div>
         </>
       ) : (
-        <EmptyState
-          icon={<MessageCircle size={26} />}
-          text={
+        <EmptyState kind="chats" text={
             backend?.centerChatEnabled
               ? "Markaz sahifasidagi «Yozish» tugmasi orqali savol bering — javoblar shu yerda chiqadi."
               : "Markazlar bilan yozishish Telegram ichida ochilganda ishlaydi."
-          }
-          action="Markazlarni ko‘rish"
-          onAction={() => setTab("home")}
-        />
+          } action={{ label: "Markazlarni ko‘rish", onClick: () => setTab("home") }} />
       )}
     </Page>
   );

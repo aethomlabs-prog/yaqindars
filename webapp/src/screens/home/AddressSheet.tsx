@@ -2,7 +2,6 @@
 import { Check, Home, LocateFixed, MapPin, Settings2 } from "lucide-react";
 import { Row } from "../../components/ios/Grouped";
 import { Sheet } from "../../components/ios/Sheet";
-import { Spinner } from "../../components/ios/Spinner";
 import { haptic } from "../../lib/telegram";
 import { useApp, useOrigin, useProfile } from "../../store/app";
 import { useNav } from "../../store/nav";
@@ -24,7 +23,7 @@ export function AddressSheet({ open, onClose }: { open: boolean; onClose: () => 
       <p className="px-6 pb-3 text-center text-footnote text-ink2">Masofa va «eng yaqin» saralash shu nuqtadan hisoblanadi.</p>
       <div className="mx-4 overflow-hidden rounded-card bg-card2">
         <Row
-          icon={locating ? <Spinner size={16} /> : <LocateFixed size={17} />}
+          icon={locating ? <span className="app-busy" aria-label="Aniqlanmoqda"><i /><i /><i /></span> : <LocateFixed size={17} />}
           iconBg="#1E6FD9"
           title="Joriy joylashuv"
           subtitle={userPos ? "GPS bo‘yicha" : "Ruxsat so‘raladi"}
