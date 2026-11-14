@@ -1,0 +1,50 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "tgLinks",
+      "fieldPath": "initData",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "logs",
+      "fieldPath": "stack",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "logs",
+      "fieldPath": "message",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "logs",
+      "fieldPath": "device",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "messages",
+      "fieldPath": "text",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "applications",
+      "fieldPath": "comment",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "centers",
+      "fieldPath": "description",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "centers",
+      "fieldPath": "groups",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "centers",
+      "fieldPath": "teachers",
+      "indexes": []
+    }
+  ]
+}

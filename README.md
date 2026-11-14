@@ -265,3 +265,28 @@ docker logs -f yaqindars-bot
 ```
 
 Har push’da Railway/Render botni o‘zi qayta joylaydi. Xatolar loglarda va Firestore’dagi `logs` kolleksiyasida ko‘rinadi.
+
+---
+
+## Firestore indekslari (`firestore.indexes.json`)
+
+Ilova va botdagi **barcha** so‘rovlar bitta maydonli (tenglik, bitta diapazon yoki bitta `orderBy`) — ular uchun
+Firestore indeksni avtomatik yaratadi, shuning uchun **kompozit indeks kerak emas** (`"indexes": []`).
+
+| Kolleksiya | So‘rov | Kim |
+|---|---|---|
+| `centers` | `approved == true` · `ownerTgId == X` | ilova, bot |
+| `applications` | `tgUserId == X` · `centerId == X` · `notified == false` · `status == "accepted"` · `statusBy == "web"` · `createdAt < T` | ilova, bot |
+| `chats` | `userTgId == X` · `unreadCenter > 0` | ilova, bot |
+| `chats/*/messages` | `orderBy(createdAt)` · `notified == false` | ilova, bot |
+| `waitlist` | `centerId == X` · `userTgId == X` | bot |
+| `tgLinks` | `status == "pending"` · `tg == X` | bot |
+| `deleteRequests` | `status == "pending"` | bot |
+| `logs` | `createdAt < T` · `orderBy(createdAt desc)` | bot |
+
+`fieldOverrides` — katta matnli maydonlar (initData, xato stack’i, xabar matni, tavsif, guruhlar ro‘yxati)
+indeksdan chiqarilgan: ular bo‘yicha qidiruv yo‘q, indekslash esa yozishni sekinlashtiradi va pul turadi.
+Yangi **ikki maydonli** so‘rov qo‘shilsa (masalan `where(a) + orderBy(b)`), indeksni shu faylga qo‘shing.
+
+Joylash (Firebase CLI bilan): `firebase deploy --only firestore` — qoidalar va indekslar birga.
+Yoki qoidalarni Console → Firestore → Rules orqali qo‘lda qo‘ying.
