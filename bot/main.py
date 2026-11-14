@@ -47,13 +47,15 @@ def _with_param(url: str, key: str, value: str) -> str:
 
 # Markazni ro'yxatdan o'tkazish Mini App'i (o'sha web app, ?mode=register)
 REGISTER_URL = _with_param(WEBAPP_URL, "mode", "register")
+INSTALL_URL = _with_param(WEBAPP_URL, "install", "1")  # ilova ochilishi bilan «Bosh ekranga qo‘shish»
+OWNER_URL = _with_param(WEBAPP_URL, "mode", "owner")  # ta'lim beruvchi kabineti
 
 import firebase_admin  # noqa: E402
 from aiogram import Bot, Dispatcher, F, Router  # noqa: E402
 from aiogram.client.default import DefaultBotProperties  # noqa: E402
 from aiogram.enums import ParseMode  # noqa: E402
 from aiogram.exceptions import TelegramBadRequest  # noqa: E402
-from aiogram.filters import Command, CommandStart, StateFilter  # noqa: E402
+from aiogram.filters import Command, CommandObject, CommandStart, StateFilter  # noqa: E402
 from aiogram.fsm.context import FSMContext  # noqa: E402
 from aiogram.fsm.state import State, StatesGroup  # noqa: E402
 from aiogram.types import (  # noqa: E402
@@ -130,6 +132,11 @@ class EditPrice(StatesGroup):
 
 class Reply(StatesGroup):
     text = State()
+
+
+class Support(StatesGroup):
+    ask = State()  # foydalanuvchi adminga savol yozmoqda
+    answer = State()  # admin javob yozmoqda
 
 
 # ---------------- Helpers ----------------
@@ -265,26 +272,150 @@ async def cancel(message: Message, state: FSMContext):
     )
 
 
-@router.message(CommandStart())
-async def start(message: Message, state: FSMContext):
-    await state.clear()
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🗺 Xaritani ochish", web_app=WebAppInfo(url=WEBAPP_URL))]
+# Reply menyu tugmalari (matni bo'yicha ushlanadi)
+BTN_INSTALL = "📲 O‘rnatib olish"
+BTN_OPEN = "🚀 Ochish"
+BTN_ADMIN = "💬 Admin bilan bog‘lanish"
+BTN_TEACHER = "🎓 Ta’lim beruvchi bo‘lib kirish"
+
+
+def ibtn(text: str, url: str, style: str | None = None) -> InlineKeyboardButton:
+    """Mini App ochadigan inline tugma; style: primary (ko'k) / success (yashil) — logo ranglari."""
+    return InlineKeyboardButton(text=text, web_app=WebAppInfo(url=url), style=style)
+
+
+def main_menu() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text=BTN_INSTALL, web_app=WebAppInfo(url=INSTALL_URL), style="success"),
+                KeyboardButton(text=BTN_OPEN, web_app=WebAppInfo(url=WEBAPP_URL), style="primary"),
+            ],
+            [KeyboardButton(text=BTN_ADMIN), KeyboardButton(text=BTN_TEACHER)],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder="Menyudan tanlang",
+    )
+
+
+def welcome_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [ibtn("📲 Ilovani telefonga o‘rnatish", INSTALL_URL, "success")],
+        [ibtn("🚀 Telegramda ochish", WEBAPP_URL, "primary")],
     ])
+
+
+@router.message(CommandStart())
+async def start(message: Message, state: FSMContext, command: CommandObject):
+    await state.clear()
+    if (command.args or "").strip() == "markaz":  # t.me/BOT?start=markaz (ilovadagi «Markazingizni qo‘shing»)
+        return await markaz(message, state)
+    name = escape(message.from_user.first_name or "")
+    await message.answer(f"Assalomu alaykum{', ' + name if name else ''}! 👋", reply_markup=main_menu())
     await message.answer(
-        "Assalomu alaykum! <b>YaqinDars</b> — uyingizga yaqin o‘quv markazlari, to‘garaklar va repetitorlar xaritasi.\n\n"
-        "• Fan, narx va dars kunini tanlang\n"
-        "• Guruhda bo‘sh joy borligini ko‘ring\n"
-        "• Bir tugma bilan bepul sinov darsiga yoziling\n\n"
-        "O‘quv markazi rahbarimisiz? /markaz",
+        "<b>YaqinDars</b> — uyingizga yaqin o‘quv markazlari, to‘garaklar va repetitorlar 📍\n\n"
+        "🔎 Fan, narx va dars kunini tanlang\n"
+        "🟢 Guruhda bo‘sh joy borligini darhol ko‘ring\n"
+        "🎁 Bir bosishda <b>bepul sinov darsiga</b> yoziling\n"
+        "👩‍🏫 O‘qituvchilar, sharoitlar va sharhlar bilan tanishing\n\n"
+        "Ilovani telefoningizga o‘rnatib oling — bosh ekrandan bir bosishda ochiladi.",
+        reply_markup=welcome_kb(),
+    )
+
+
+@router.message(F.text == BTN_INSTALL)
+@router.message(F.text == BTN_OPEN)
+async def menu_open(message: Message, state: FSMContext):
+    # Eski Telegram'da web_app reply tugmasi oddiy matn bo'lib keladi — inline tugma bilan javob beramiz
+    await state.clear()
+    install = message.text == BTN_INSTALL
+    kb = InlineKeyboardMarkup(inline_keyboard=[[ibtn(
+        "📲 O‘rnatish" if install else "🚀 Ochish", INSTALL_URL if install else WEBAPP_URL, "success" if install else "primary"
+    )]])
+    await message.answer("Pastdagi tugmani bosing 👇", reply_markup=kb)
+
+
+@router.message(F.text == BTN_TEACHER)
+async def menu_teacher(message: Message, state: FSMContext):
+    await state.clear()
+    docs = await owner_centers(message.from_user.id)
+    if not docs:
+        await message.answer(
+            "🎓 <b>Ta’lim beruvchi bo‘lib kirish</b>\n\n"
+            "Siz hali markaz yoki repetitor sifatida ro‘yxatdan o‘tmagansiz.\n"
+            f"{TARIFF_TEXT}\n\n"
+            "Pastdagi <b>«📝 Markazni qo‘shish»</b> tugmasini bosing — 3–5 daqiqa.",
+            reply_markup=register_keyboard(),
+        )
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[[ibtn("🎓 Kabinetni ochish", OWNER_URL, "primary")]])
+    names = ", ".join(escape(str(as_dict(d).get("name", ""))) for d in docs)
+    await message.answer(
+        f"🎓 <b>Kabinet</b>: {names}\n\n"
+        "Arizalarni qabul qilish, bo‘sh joylar va narxlarni boshqarish — hammasi bitta oynada.",
         reply_markup=kb,
     )
+    await message.answer("Menyu 👇", reply_markup=main_menu())
+
+
+# ---------------- Admin bilan bog'lanish ----------------
+@router.message(F.text == BTN_ADMIN)
+async def menu_admin(message: Message, state: FSMContext):
+    if not ADMIN_IDS:
+        return await message.answer("Hozircha admin ulanmagan. Keyinroq urinib ko‘ring.")
+    await state.set_state(Support.ask)
+    await message.answer(
+        "✍️ Savolingiz yoki taklifingizni bitta xabarda yozing — adminga yetkazaman va javobni shu yerga yuboraman.\n\n"
+        "Bekor qilish: /cancel",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
+@router.message(Support.ask, TEXT)
+async def support_ask(message: Message, state: FSMContext, bot: Bot):
+    await state.clear()
+    u = message.from_user
+    who = f"@{escape(u.username)}" if u.username else escape(u.full_name)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[btn("↩️ Javob berish", "sa", u.id)]])
+    sent = 0
+    for admin in ADMIN_IDS:
+        try:
+            await bot.send_message(admin, f"📩 <b>Murojaat</b> — {who} (<code>{u.id}</code>):\n\n{escape(message.text[:3000])}", reply_markup=kb)
+            sent += 1
+        except Exception as e:  # noqa: BLE001
+            log.warning("Murojaat adminga yuborilmadi: %s", e)
+    await message.answer(
+        "✅ Xabaringiz adminga yuborildi. Javob shu chatga keladi." if sent else "Adminga yuborib bo‘lmadi, keyinroq urinib ko‘ring.",
+        reply_markup=main_menu(),
+    )
+
+
+@router.callback_query(F.data.startswith("sa:"))
+async def support_answer_start(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        return await call.answer("Faqat admin uchun.", show_alert=True)
+    await state.set_state(Support.answer)
+    await state.update_data(to=int(call.data.split(":", 1)[1]))
+    await call.message.answer("✍️ Javobingizni yozing (bekor qilish: /cancel):")
+    await call.answer()
+
+
+@router.message(Support.answer, TEXT)
+async def support_answer_send(message: Message, state: FSMContext, bot: Bot):
+    to = (await state.get_data()).get("to")
+    await state.clear()
+    try:
+        await bot.send_message(to, f"💬 <b>Admin javobi:</b>\n{escape(message.text[:3000])}", reply_markup=main_menu())
+        await message.answer("✅ Javob yuborildi.")
+    except Exception as e:  # noqa: BLE001
+        await message.answer(f"Yuborilmadi: {escape(str(e))[:200]}")
 
 
 @router.message(Command("help"))
 async def help_cmd(message: Message):
     text = (
-        "/start — xaritani ochish\n"
+        "/start — bosh menyu\n"
         "/markaz — markaz paneli (ro‘yxatdan o‘tish, guruhlar, bo‘sh joylar)\n"
         "/cancel — joriy amalni bekor qilish\n"
         "/id — Telegram ID’ingizni bilish"
@@ -387,6 +518,8 @@ async def on_register_app(message: Message, state: FSMContext, bot: Bot):
         reply_markup=ReplyKeyboardRemove(),
     )
     await send_panel(message, ref.id)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📱 Ilovani ochish", web_app=WebAppInfo(url=WEBAPP_URL))]])
+    await message.answer("Ota-onalar markazingizni qanday ko‘rishini ilovada tekshiring:", reply_markup=kb)
     await notify_admins_new_center(bot, ref.id, doc, user)
 
 
@@ -521,13 +654,11 @@ async def on_group(call: CallbackQuery, state: FSMContext):
             return False
         return True
 
-    was_full = int(groups[idx].get("freeSeats", 0)) <= 0
     data = await update_groups(cid, call.from_user.id, change)
     if data is None:
         return await call.answer("Bu markazni boshqarishga ruxsatingiz yo‘q.", show_alert=True)
     await edit_panel(call.message, cid, data)
-    if action == "inc" and was_full:
-        asyncio.create_task(notify_waitlist(call.bot, cid, idx, data))
+    # Joy 0 dan ko'paysa kutish ro'yxatiga xabarni start_seats_watcher yuboradi (bot va kabinet uchun bitta joy)
     await call.answer("Guruh o‘chirildi 🗑" if action == "del" else "Saqlandi ✅")
 
 
@@ -808,7 +939,7 @@ async def on_app_status(call: CallbackQuery, bot: Bot):
     if not center:
         return
     c = as_dict(center)
-    upd = {"status": status, "updatedAt": firestore.SERVER_TIMESTAMP}
+    upd = {"status": status, "statusBy": "bot", "updatedAt": firestore.SERVER_TIMESTAMP}
     trial = None
     if status == "accepted":
         groups = c.get("groups") or []
@@ -919,10 +1050,8 @@ async def stale_callback(call: CallbackQuery):
 
 @router.message(StateFilter(None))
 async def no_state(message: Message):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🗺 Xaritani ochish", web_app=WebAppInfo(url=WEBAPP_URL))]
-    ])
-    await message.answer("Buyruqlar: /start — xarita, /markaz — markaz paneli, /help — yordam", reply_markup=kb)
+    await message.answer("Quyidagilardan birini tanlang 👇", reply_markup=welcome_kb())
+    await message.answer("Yoki pastdagi menyudan foydalaning.", reply_markup=main_menu())
 
 
 @router.message()
@@ -1108,6 +1237,52 @@ async def remind_trials(bot: Bot):
         await asyncio.to_thread(d.reference.update, {"trialReminded": True})
 
 
+# ---------------- Kabinetdagi o'zgarishlar -> ota-onalarga xabar ----------------
+async def notify_status_from_web(bot: Bot, ref):
+    snap = await asyncio.to_thread(ref.get)
+    a = as_dict(snap)
+    st = a.get("status")
+    if a.get("statusBy") != "web" or st not in ("accepted", "rejected") or a.get("statusNotified") == st:
+        return
+    await asyncio.to_thread(ref.update, {"statusNotified": st})
+    name = escape(str(a.get("centerName", "")))
+    if st == "accepted":
+        t = a.get("trialAt")
+        when = f"\n🗓 Sinov darsi: <b>{t.astimezone(TASHKENT).strftime('%d.%m, %H:%M')}</b>" if isinstance(t, datetime) else ""
+        await notify_user(bot, a.get("tgUserId"), f"✅ <b>{name}</b> arizangizni qabul qildi!{when}\nMarkaz siz bilan telefon orqali bog‘lanadi.")
+    else:
+        await notify_user(bot, a.get("tgUserId"), f"Afsuski, <b>{name}</b> hozircha arizangizni qabul qila olmadi. Ilovada boshqa guruhlarni ko‘ring.")
+
+
+def start_status_watcher(bot: Bot, loop: asyncio.AbstractEventLoop):
+    def on_snapshot(_docs, changes, _read_time):
+        for ch in changes:
+            if ch.type.name in ("ADDED", "MODIFIED"):
+                asyncio.run_coroutine_threadsafe(notify_status_from_web(bot, ch.document.reference), loop)
+
+    return APPS.where(filter=FieldFilter("statusBy", "==", "web")).on_snapshot(on_snapshot)
+
+
+_seats: dict[str, list[int]] = {}
+
+
+def start_seats_watcher(bot: Bot, loop: asyncio.AbstractEventLoop):
+    """Guruhda joy 0 dan ko'paysa (bot ➕ yoki kabinet orqali) — kutish ro'yxatiga xabar."""
+    def on_snapshot(_docs, changes, _read_time):
+        for ch in changes:
+            c = as_dict(ch.document)
+            now = [int(g.get("freeSeats", 0) or 0) for g in (c.get("groups") or [])]
+            prev = _seats.get(ch.document.id)
+            _seats[ch.document.id] = now
+            if ch.type.name != "MODIFIED" or prev is None:
+                continue
+            for i, n in enumerate(now):
+                if n > 0 and i < len(prev) and prev[i] <= 0:
+                    asyncio.run_coroutine_threadsafe(notify_waitlist(bot, ch.document.id, i, c), loop)
+
+    return CENTERS.where(filter=FieldFilter("approved", "==", True)).on_snapshot(on_snapshot)
+
+
 # ---------------- Weekly reminder ----------------
 async def reminder_loop(bot: Bot):
     while True:
@@ -1153,9 +1328,9 @@ async def main():
     dp = Dispatcher()
     dp.include_router(router)
 
-    await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Xarita", web_app=WebAppInfo(url=WEBAPP_URL)))
+    await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Ochish", web_app=WebAppInfo(url=WEBAPP_URL)))
     await bot.set_my_commands([
-        BotCommand(command="start", description="Xaritani ochish"),
+        BotCommand(command="start", description="Bosh menyu"),
         BotCommand(command="markaz", description="Markazni qo‘shish / boshqarish"),
         BotCommand(command="help", description="Yordam"),
         BotCommand(command="cancel", description="Bekor qilish"),
@@ -1169,6 +1344,8 @@ async def main():
     watch = start_application_watcher(bot, loop)
     links = start_link_watcher()
     chats = start_chat_watcher(bot, loop)
+    statuses = start_status_watcher(bot, loop)
+    seats = start_seats_watcher(bot, loop)
     reminder = asyncio.create_task(reminder_loop(bot))
     log.info("Bot ishga tushdi. Adminlar: %s", ", ".join(map(str, ADMIN_IDS)) or "yo‘q")
     try:
@@ -1177,6 +1354,8 @@ async def main():
         watch.unsubscribe()
         links.unsubscribe()
         chats.unsubscribe()
+        statuses.unsubscribe()
+        seats.unsubscribe()
         reminder.cancel()
         await bot.session.close()
 

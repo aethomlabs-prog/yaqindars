@@ -1,4 +1,4 @@
-import { tgLocation, type Fix } from "./telegram";
+import { inTelegram, tgLocation, type Fix } from "./telegram";
 import type { LatLng } from "./types";
 
 export type { Fix };
@@ -31,10 +31,15 @@ function browserFix(timeout: number): Promise<Fix> {
 
 /** Aniq joylashuv: brauzer GPS (yuqori aniqlik), u ishlamasa — Telegram LocationManager. */
 export async function getCurrentPosition(timeout = 12000): Promise<Fix> {
+  // Telegram ichida webview GPS’i ko‘pincha bloklangan — avval Telegram’ning o‘z API’si (ruxsat oynasi bilan)
+  if (inTelegram) {
+    const t = await tgLocation();
+    if (t) return t;
+  }
   try {
     return await browserFix(timeout);
   } catch (e) {
-    const t = await tgLocation();
+    const t = inTelegram ? null : await tgLocation();
     if (t) return t;
     throw e;
   }
@@ -42,15 +47,31 @@ export async function getCurrentPosition(timeout = 12000): Promise<Fix> {
 
 /** Joylashuvni doimiy kuzatish (xarita ochiq paytida). Qaytaradi: to‘xtatish funksiyasi. */
 export function watchPosition(onFix: (f: Fix) => void, onDenied?: () => void): () => void {
-  if (!navigator.geolocation) return () => {};
-  const id = navigator.geolocation.watchPosition(
-    (p) => onFix(fromBrowser(p)),
-    (e) => {
-      if (e.code === e.PERMISSION_DENIED) onDenied?.();
-    },
-    { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
-  );
-  return () => navigator.geolocation.clearWatch(id);
+  let browserOk = false;
+  let id: number | null = null;
+  if (navigator.geolocation)
+    id = navigator.geolocation.watchPosition(
+      (p) => {
+        browserOk = true;
+        onFix(fromBrowser(p));
+      },
+      (e) => {
+        if (e.code === e.PERMISSION_DENIED) onDenied?.();
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+    );
+  // Telegram ichida webview GPS ishlamasa — Telegram LocationManager’dan har 10 soniyada yangilaymiz
+  const poll = inTelegram
+    ? setInterval(async () => {
+        if (browserOk) return;
+        const t = await tgLocation();
+        if (t) onFix(t);
+      }, 10000)
+    : null;
+  return () => {
+    if (id !== null) navigator.geolocation.clearWatch(id);
+    if (poll) clearInterval(poll);
+  };
 }
 
 export function routeUrl(to: LatLng, from?: LatLng | null): string {

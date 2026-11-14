@@ -1,10 +1,12 @@
-/* Telegram WebApp SDK o‘rami. Oddiy brauzerda (initData bo‘sh) hamma chaqiruvlar xavfsiz «no-op». */
+/* Telegram WebApp SDK o‘rami. Oddiy brauzerda (platform = "unknown") hamma chaqiruvlar xavfsiz «no-op». */
 import { useEffect, useRef } from "react";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type TG = any;
 const raw: TG = (window as any).Telegram?.WebApp;
-export const tg: TG | null = raw?.initData ? raw : null;
+// Muhim: pastdagi KLAVIATURA tugmasidan ochilgan Mini App’da initData BO‘SH bo‘ladi (sendData shu rejimda ishlaydi),
+// shuning uchun Telegram ichida ekanimizni platform orqali aniqlaymiz.
+export const tg: TG | null = raw && (raw.initData || (raw.platform && raw.platform !== "unknown")) ? raw : null;
 export const inTelegram = !!tg;
 export const can = (ver: string) => !!tg && !!tg.isVersionAtLeast?.(ver);
 
@@ -79,6 +81,37 @@ export function openLocationSettings(): boolean {
     return true;
   }
   return false;
+}
+
+/* ---------- Bosh ekranga qo‘shish (Bot API 8.0+) ---------- */
+export type HomeStatus = "unsupported" | "unknown" | "added" | "missed";
+
+export function checkHomeScreen(): Promise<HomeStatus> {
+  if (!can("8.0") || !tg.checkHomeScreenStatus) return Promise.resolve("unsupported");
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve("unknown"), 2000);
+    try {
+      tg.checkHomeScreenStatus((s: HomeStatus) => {
+        clearTimeout(t);
+        resolve(s || "unknown");
+      });
+    } catch {
+      clearTimeout(t);
+      resolve("unsupported");
+    }
+  });
+}
+
+/** Telegram’ning «Bosh ekranga qo‘shish» oynasi; qo‘shilganda onAdded chaqiriladi */
+export function addToHomeScreen(onAdded: () => void): boolean {
+  if (!can("8.0") || !tg.addToHomeScreen) return false;
+  const h = () => {
+    tg.offEvent?.("homeScreenAdded", h);
+    onAdded();
+  };
+  tg.onEvent?.("homeScreenAdded", h);
+  tg.addToHomeScreen();
+  return true;
 }
 
 /* ---------- Haptic ---------- */

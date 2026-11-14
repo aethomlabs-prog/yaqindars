@@ -265,6 +265,13 @@ function TeacherSheet({ open, initial, subjects, onSave, onClose }: { open: bool
   );
 }
 
+/** Ro‘yxatdan o‘tish rejimidan asosiy web app’ga (xarita, markazlar) */
+function goMainApp() {
+  const u = new URL(location.href);
+  u.searchParams.delete("mode");
+  location.replace(u.toString());
+}
+
 /* ---------- Asosiy oqim ---------- */
 type StepId = "tariff" | "info" | "location" | "groups" | "teachers" | "review";
 const TITLES: Record<StepId, string> = {
@@ -334,13 +341,14 @@ export default function RegisterApp() {
       return go(steps.indexOf(bad));
     }
     haptic.success();
-    try {
-      localStorage.removeItem(KEY);
-    } catch {
-      /* private rejim */
-    }
+    // sendData faqat pastdagi klaviatura tugmasidan ochilganda ishlaydi (inline/menyu tugmasida query_id bo‘ladi)
     if (inTelegram && tg?.sendData && !tg.initDataUnsafe?.query_id) {
-      tg.sendData(payload); // Telegram Mini App’ni o‘zi yopadi
+      try {
+        localStorage.removeItem(KEY); // qoralama faqat haqiqatan yuborilganda o‘chadi
+      } catch {
+        /* private rejim */
+      }
+      tg.sendData(payload); // Telegram Mini App’ni o‘zi yopadi, bot javob yozadi
     } else {
       setSent(true);
     }
@@ -367,15 +375,22 @@ export default function RegisterApp() {
         <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={spring}>
           <CheckCircle2 size={76} strokeWidth={1.5} className="text-green" />
         </motion.div>
-        <h1 className="mt-4 text-title">Ma’lumotlar tayyor</h1>
+        <h1 className="mt-4 text-title">{inTelegram ? "Deyarli tayyor" : "Ma’lumotlar tayyor"}</h1>
         <p className="mt-2 text-subhead text-ink2">
           {inTelegram
-            ? "Bu oyna inline tugma orqali ochilgan. Botda /markaz yozib, pastdagi «Markazni qo‘shish» tugmasi orqali qayta oching — ma’lumotlaringiz saqlangan."
+            ? "Yuborish uchun botda /markaz yozing va pastdagi «📝 Markazni qo‘shish» tugmasini bosing — kiritganlaringiz saqlangan, faqat «Yuborish»ni bosasiz."
             : "Bu namuna rejimi: Telegram’da botning /markaz buyrug‘i orqali ochilganda ma’lumot botga yuboriladi va admin tekshiradi."}
         </p>
-        <Button kind="tinted" className="mt-6" onClick={() => setSent(false)}>
-          Orqaga
-        </Button>
+        <div className="mt-6 w-full max-w-[320px] space-y-2">
+          <Button className="w-full" onClick={goMainApp}>
+            Ilovaga o‘tish
+          </Button>
+          {inTelegram && (
+            <Button kind="plain" className="w-full" onClick={() => tg?.close?.()}>
+              Botga qaytish
+            </Button>
+          )}
+        </div>
       </div>
     );
 

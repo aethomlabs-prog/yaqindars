@@ -18,12 +18,12 @@ import {
   updateDoc,
   where,
   writeBatch,
+  Timestamp,
   type DocumentData,
-  type Firestore,
-  type Timestamp
+  type Firestore
 } from "firebase/firestore";
 import { FIREBASE_CONFIG, FUNCTIONS_URL } from "../../config";
-import type { ApplyInput, Backend, ProfileDoc } from "./backend";
+import type { ApplyInput, Backend, OwnerApi, OwnerCenter, ProfileDoc } from "./backend";
 import { centerChatId } from "./backend";
 import { ruleBasedReply } from "./match";
 import { initData, tgUser } from "./telegram";
@@ -153,7 +153,48 @@ export async function createFirebaseBackend(): Promise<Backend> {
     return uid;
   };
 
+  // Ta’lim beruvchi kabineti — Firestore qoidalari faqat markaz egasiga ruxsat beradi
+  const owner: OwnerApi | undefined = tgId
+    ? {
+        watchMyCenters(cb) {
+          return onSnapshot(
+            query(collection(db, "centers"), where("ownerTgId", "==", tgId)),
+            (s) =>
+              cb(
+                s.docs.map((d): OwnerCenter => {
+                  const x = d.data({ serverTimestamps: "estimate" });
+                  return { ...toCenter(d.id, x), approved: x.approved === true, tariff: x.tariff === "vip" || x.tariff === "oddiy" ? x.tariff : null };
+                })
+              ),
+            (e) => console.warn("myCenters:", e)
+          );
+        },
+        async saveGroups(centerId, groups) {
+          await updateDoc(doc(db, "centers", centerId), {
+            groups: groups.map((g) => ({ subject: g.subject, days: g.days, time: g.time, price: g.price, freeSeats: g.freeSeats })),
+            updatedAt: serverTimestamp()
+          });
+        },
+        watchCenterApplications(centerId, cb) {
+          return onSnapshot(
+            query(collection(db, "applications"), where("centerId", "==", centerId)),
+            (s) => cb(s.docs.map((d) => toApp(d.id, d.data({ serverTimestamps: "estimate" }))).sort((a, b) => b.createdMs - a.createdMs)),
+            (e) => console.warn("centerApps:", e)
+          );
+        },
+        async setApplicationStatus(app, status, trialMs) {
+          // statusBy: "web" — bot shu belgini ko‘rib ota-onaga Telegram xabarini yuboradi
+          await updateDoc(doc(db, "applications", app.id), {
+            status,
+            statusBy: "web",
+            trialAt: trialMs ? Timestamp.fromMillis(trialMs) : null
+          });
+        }
+      }
+    : undefined;
+
   const backend: Backend = {
+    owner,
     mode: "firebase",
     authed,
     botUsername: typeof meta?.botUsername === "string" ? meta.botUsername : undefined,

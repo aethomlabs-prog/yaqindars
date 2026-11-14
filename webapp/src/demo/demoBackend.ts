@@ -1,5 +1,5 @@
 /* DEMO backend: hammasi qurilmada (localStorage), markaz javoblari va ariza holatlari simulyatsiya qilinadi. */
-import type { ApplyInput, Backend, ProfileDoc } from "../lib/backend";
+import type { ApplyInput, Backend, OwnerCenter, ProfileDoc } from "../lib/backend";
 import { centerChatId } from "../lib/backend";
 import { nextLessonMs } from "../lib/format";
 import { RISHTON } from "../lib/geo";
@@ -85,8 +85,43 @@ export function createDemoBackend(): Backend {
     else save();
   }
 
+  // DEMO kabinet: «Bilimdon» va «Ziyo Academy» — sizniki
+  const mine: OwnerCenter[] = DEMO_CENTERS.filter((c) => c.id === "demo1" || c.id === "demo11").map((c) => ({
+    ...structuredClone(c),
+    approved: true,
+    tariff: c.vip ? "vip" : "oddiy"
+  }));
+  const H = 3600000;
+  const ownerApps: Application[] = [
+    { id: "oa1", centerId: "demo1", centerName: mine[0].name, group: "Ingliz tili · Du, Ch, Ju · 16:00–17:30", groupIndex: 0, name: "Nodira Karimova", phone: "+998901112233", childId: null, comment: "O‘g‘lim 9 yoshda, boshlang‘ich daraja", status: "new", createdMs: Date.now() - 0.5 * H, trialMs: null },
+    { id: "oa2", centerId: "demo1", centerName: mine[0].name, group: "Matematika · Se, Pa, Sh · 15:00–16:30", groupIndex: 1, name: "Sardor Aliyev", phone: "+998935554411", childId: null, comment: "", status: "seen", createdMs: Date.now() - 5 * H, trialMs: null },
+    { id: "oa3", centerId: "demo1", centerName: mine[0].name, group: "Ingliz tili · Du, Ch, Ju · 16:00–17:30", groupIndex: 0, name: "Gulbahor Tursunova", phone: "+998977778899", childId: null, comment: "", status: "accepted", createdMs: Date.now() - 30 * H, trialMs: Date.now() + 20 * H },
+    { id: "oa4", centerId: "demo11", centerName: mine[1].name, group: "IT · Sh, Ya · 10:00–12:00", groupIndex: 3, name: "Jasur Ahmedov", phone: "+998998887766", childId: null, comment: "Python o‘rganmoqchi", status: "new", createdMs: Date.now() - 2 * H, trialMs: null }
+  ];
+  const ownerListeners = new Set<() => void>();
+  const ownerEmit = () => ownerListeners.forEach((l) => l());
+  const ownerSub = (fn: () => void) => {
+    ownerListeners.add(fn);
+    fn();
+    return () => void ownerListeners.delete(fn);
+  };
+
   return {
     mode: "demo",
+    owner: {
+      watchMyCenters: (cb) => ownerSub(() => cb(mine.map((c) => ({ ...c, groups: c.groups.map((g) => ({ ...g })) })))),
+      async saveGroups(centerId, groups) {
+        const c = mine.find((x) => x.id === centerId);
+        if (c) c.groups = groups.map((g) => ({ ...g }));
+        ownerEmit();
+      },
+      watchCenterApplications: (centerId, cb) => ownerSub(() => cb(ownerApps.filter((a) => a.centerId === centerId).map((a) => ({ ...a })))),
+      async setApplicationStatus(app, status, trialMs) {
+        const a = ownerApps.find((x) => x.id === app.id);
+        if (a) Object.assign(a, { status, trialMs });
+        ownerEmit();
+      }
+    },
     authed: true,
     centerChatEnabled: true,
     aiEnabled: false,

@@ -1,5 +1,5 @@
 /* Ma’lumot qatlami interfeysi. DEMO — lokal; Firebase — Firestore (+ Functions bo‘lsa auth). */
-import type { Application, Center, Chat, Child, Address, Message, Review } from "./types";
+import type { Application, AppStatus, Center, Chat, Child, Address, Group, Message, Review } from "./types";
 
 export interface ApplyInput {
   center: Center;
@@ -21,12 +21,27 @@ export interface ProfileDoc {
 
 export type Unsub = () => void;
 
+/** Ta’lim beruvchi kabineti: o‘z markazi (tasdiqlanmagan bo‘lsa ham) */
+export interface OwnerCenter extends Center {
+  approved: boolean;
+  tariff: "oddiy" | "vip" | null;
+}
+
+export interface OwnerApi {
+  watchMyCenters(cb: (c: OwnerCenter[]) => void): Unsub;
+  saveGroups(centerId: string, groups: Group[]): Promise<void>;
+  watchCenterApplications(centerId: string, cb: (a: Application[]) => void): Unsub;
+  setApplicationStatus(app: Application, status: AppStatus, trialMs: number | null): Promise<void>;
+}
+
 export interface Backend {
   mode: "demo" | "firebase";
   /** Telegram orqali tasdiqlangan (custom token) foydalanuvchi bormi */
   authed: boolean;
   /** Markaz bilan chat ishlaydimi (auth kerak) */
   centerChatEnabled: boolean;
+  /** Kabinet (faqat Telegram orqali tasdiqlangan foydalanuvchi yoki DEMO) */
+  owner?: OwnerApi;
   /** Bot username (bot ishga tushganda bazaga yozadi) — «Ulashish» havolalari uchun */
   botUsername?: string;
   /** AI LLM backend ulanganmi (yo‘q bo‘lsa — qoidaga asoslangan) */

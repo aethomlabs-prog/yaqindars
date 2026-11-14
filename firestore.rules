@@ -20,9 +20,18 @@ service cloud.firestore {
     // Markazlar: hamma faqat TASDIQLANGANLARINI o'qiy oladi.
     // Mini App so'rovi where("approved", "==", true) bilan bo'lishi shart, aks holda qoida rad etadi.
     // Yozish faqat bot orqali (Admin SDK qoidalarni chetlab o'tadi).
+    // Markaz egasi (kabinet) o'z markazini tasdiqlanmagan bo'lsa ham ko'radi va faqat guruhlarini
+    // (bo'sh joy, narx) o'zgartira oladi. Qolgan maydonlar (approved, vip, tariff...) — faqat bot/admin.
+    function ownsCenter(cid) {
+      return isTg(get(/databases/$(database)/documents/centers/$(cid)).data.ownerTgId);
+    }
     match /centers/{id} {
-      allow read: if resource.data.approved == true;
-      allow write: if false;
+      allow read: if resource.data.approved == true || isTg(resource.data.ownerTgId);
+      allow update: if isTg(resource.data.ownerTgId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['groups', 'updatedAt'])
+        && request.resource.data.groups is list && request.resource.data.groups.size() <= 10
+        && request.resource.data.updatedAt == request.time;
+      allow create, delete: if false;
     }
 
     // Telegram tasdiqlash so'rovi: anonim foydalanuvchi faqat o'z hujjatini "pending" holatida yozadi.
@@ -71,8 +80,14 @@ service cloud.firestore {
       allow create: if validApplication(request.resource.data)
         // ariza faqat mavjud va tasdiqlangan markazga
         && get(/databases/$(database)/documents/centers/$(request.resource.data.centerId)).data.approved == true;
-      allow read: if isTg(resource.data.tgUserId);
-      allow update, delete: if false;
+      allow read: if isTg(resource.data.tgUserId) || ownsCenter(resource.data.centerId);
+      // Kabinet: markaz egasi holatni belgilaydi; bot "statusBy: web" ni ko'rib ota-onaga xabar yuboradi
+      allow update: if ownsCenter(resource.data.centerId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'statusBy', 'trialAt'])
+        && request.resource.data.status in ['seen', 'accepted', 'rejected']
+        && request.resource.data.statusBy == 'web'
+        && (request.resource.data.get('trialAt', null) == null || request.resource.data.trialAt is timestamp);
+      allow delete: if false;
     }
 
     // «Joy bo'shasa xabar ber»

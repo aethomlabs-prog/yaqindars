@@ -1,4 +1,4 @@
-/* Xarita asosi: oddiy (OpenStreetMap) yoki Sputnik (Esri World Imagery + nomlar). Tanlov eslab qolinadi. */
+/* Xarita asosi: standart — Sputnik gibrid (haqiqiy surat + yo‘llar + nomlar), yoki oddiy xarita. Tanlov eslab qolinadi. */
 import { Layers } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Circle, Marker, TileLayer } from "react-leaflet";
@@ -12,9 +12,9 @@ const listeners = new Set<(l: BaseLayer) => void>();
 
 function read(): BaseLayer {
   try {
-    return localStorage.getItem(KEY) === "sat" ? "sat" : "map";
+    return localStorage.getItem(KEY) === "map" ? "map" : "sat";
   } catch {
-    return "map";
+    return "sat";
   }
 }
 
@@ -45,6 +45,14 @@ export function BaseTiles({ layer }: { layer: BaseLayer }) {
           attribution="Sputnik © Esri, Maxar"
           maxZoom={19}
           maxNativeZoom={18}
+          className="yd-sat"
+        />
+        <TileLayer
+          key="sat-roads"
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}"
+          maxZoom={19}
+          maxNativeZoom={18}
+          opacity={0.85}
           className="yd-sat"
         />
         <TileLayer

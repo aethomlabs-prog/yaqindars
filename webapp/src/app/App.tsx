@@ -4,6 +4,7 @@ import { pushTransition } from "../components/ios/motion";
 import { Spinner } from "../components/ios/Spinner";
 import { TabBar } from "../components/ios/TabBar";
 import { Toast } from "../components/ios/Toast";
+import { InstallPrompt } from "../components/InstallPrompt";
 import { applyChromeColors, onThemeChanged, startParam, telegramColorScheme, useBackHandler } from "../lib/telegram";
 import { useApp, useSettings } from "../store/app";
 import { useNav, type Route, type Tab } from "../store/nav";
@@ -24,7 +25,8 @@ import { AboutPage } from "../screens/profile/AboutPage";
 const MapScreen = lazy(() => import("../screens/map/MapScreen"));
 // Markazlar uchun ro‘yxatdan o‘tish (bot: /markaz → ?mode=register)
 const RegisterApp = lazy(() => import("../register/RegisterApp"));
-const REGISTER_MODE = new URLSearchParams(location.search).get("mode") === "register";
+const OwnerApp = lazy(() => import("../owner/OwnerApp"));
+const MODE = new URLSearchParams(location.search).get("mode"); // register | owner | null
 
 function renderRoute(r: Route): ReactNode {
   switch (r.name) {
@@ -97,7 +99,23 @@ function useTheme() {
 }
 
 export function App() {
-  return REGISTER_MODE ? <RegisterRoot /> : <MainApp />;
+  return MODE === "register" ? <RegisterRoot /> : MODE === "owner" ? <OwnerRoot /> : <MainApp />;
+}
+
+/** Ta’lim beruvchi kabineti (bot: «🎓 Ta’lim beruvchi bo‘lib kirish») */
+function OwnerRoot() {
+  useTheme();
+  const boot = useApp((s) => s.boot);
+  useEffect(() => {
+    boot();
+  }, [boot]);
+  return (
+    <MotionConfig reducedMotion="user">
+      <Suspense fallback={<Loading />}>
+        <OwnerApp />
+      </Suspense>
+    </MotionConfig>
+  );
 }
 
 function RegisterRoot() {
@@ -181,6 +199,7 @@ function MainApp() {
         )}
         <TabBar />
         <Toast />
+        <InstallPrompt />
       </div>
     </MotionConfig>
   );
