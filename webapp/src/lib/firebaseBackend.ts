@@ -94,13 +94,19 @@ function toApp(id: string, d: DocumentData): Application {
  * Mini App anonim kiradi → initData'ni tgLinks/{uid} ga yozadi → bot imzoni tekshirib "tg" claim qo'yadi.
  * Claim anonim akkauntda saqlanadi — keyingi ochilishlarda kutish yo'q.
  */
-async function linkTelegram(auth: Auth, db: Firestore): Promise<number | null> {
-  if (!initData || !tgUser) return null;
+interface LinkResult {
+  tg: number | null;
+  /** Telegram ichidamiz, lekin bot javob bermadi / xato — foydalanuvchiga ko‘rsatiladi */
+  offline: boolean;
+}
+
+async function linkTelegram(auth: Auth, db: Firestore): Promise<LinkResult> {
+  if (!initData || !tgUser) return { tg: null, offline: false }; // brauzer yoki klaviatura tugmasi — mehmon rejimi normal
   try {
     await auth.authStateReady();
     const user = auth.currentUser ?? (await signInAnonymously(auth)).user;
     const cached = await user.getIdTokenResult();
-    if (cached.claims.tg === tgUser.id) return tgUser.id;
+    if (cached.claims.tg === tgUser.id) return { tg: tgUser.id, offline: false };
 
     const ref = doc(db, "tgLinks", user.uid);
     await setDoc(ref, { initData, status: "pending", createdAt: serverTimestamp() });
@@ -123,12 +129,13 @@ async function linkTelegram(auth: Auth, db: Firestore): Promise<number | null> {
         () => finish(false)
       );
     });
-    if (!ok) return null;
+    if (!ok) return { tg: null, offline: true };
     const fresh = await user.getIdTokenResult(true);
-    return fresh.claims.tg === tgUser.id ? tgUser.id : null;
+    const tg = fresh.claims.tg === tgUser.id ? tgUser.id : null;
+    return { tg, offline: !tg };
   } catch (e) {
     console.warn("Telegram tasdiqlash ishlamadi:", e);
-    return null;
+    return { tg: null, offline: true };
   }
 }
 
@@ -137,11 +144,12 @@ export async function createFirebaseBackend(): Promise<Backend> {
   const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
   const auth = getAuth(app);
 
-  const [tg, meta] = await Promise.all([
+  const [link, meta] = await Promise.all([
     linkTelegram(auth, db),
     getDoc(doc(db, "meta", "public")).then((d) => d.data() ?? null).catch(() => null)
   ]);
   // Firestore yo'llari (users/{id}, chats/{id}_...) Telegram ID bo'yicha
+  const tg = link.tg;
   const uid: string | null = tg ? String(tg) : null;
   const authed = !!uid;
   const tgId = uid ? Number(uid) : null;
@@ -197,6 +205,7 @@ export async function createFirebaseBackend(): Promise<Backend> {
     owner,
     mode: "firebase",
     authed,
+    offline: link.offline,
     botUsername: typeof meta?.botUsername === "string" ? meta.botUsername : undefined,
     centerChatEnabled: authed,
     aiEnabled: authed && !!FUNCTIONS_URL,

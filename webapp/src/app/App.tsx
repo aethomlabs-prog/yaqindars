@@ -5,6 +5,7 @@ import { Spinner } from "../components/ios/Spinner";
 import { TabBar } from "../components/ios/TabBar";
 import { Toast } from "../components/ios/Toast";
 import { InstallPrompt } from "../components/InstallPrompt";
+import { OfflineBanner } from "../components/OfflineBanner";
 import { applyChromeColors, onThemeChanged, startParam, telegramColorScheme, useBackHandler } from "../lib/telegram";
 import { useApp, useSettings } from "../store/app";
 import { useNav, type Route, type Tab } from "../store/nav";
@@ -200,6 +201,7 @@ function MainApp() {
         <TabBar />
         <Toast />
         <InstallPrompt />
+        <OfflineBanner />
       </div>
     </MotionConfig>
   );

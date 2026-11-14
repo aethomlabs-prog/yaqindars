@@ -36,6 +36,8 @@ export interface OwnerApi {
 
 export interface Backend {
   mode: "demo" | "firebase";
+  /** Telegram ichida, lekin bot (server) javob bermadi — mehmon rejimida ishlayapmiz */
+  offline?: boolean;
   /** Telegram orqali tasdiqlangan (custom token) foydalanuvchi bormi */
   authed: boolean;
   /** Markaz bilan chat ishlaydimi (auth kerak) */

@@ -9,6 +9,7 @@ import { listItem } from "../components/ios/motion";
 import { Sheet } from "../components/ios/Sheet";
 import { Spinner } from "../components/ios/Spinner";
 import { Toast } from "../components/ios/Toast";
+import { OfflineBanner } from "../components/OfflineBanner";
 import type { OwnerCenter } from "../lib/backend";
 import { fmtDayLabel, fmtListTime, fmtSum, fmtTime, nextLessonMs } from "../lib/format";
 import { haptic, inTelegram, tg, tgUser } from "../lib/telegram";
@@ -342,6 +343,7 @@ export default function OwnerApp() {
 
       <PriceSheet key={priceIdx ?? -1} group={priceIdx !== null && center ? center.groups[priceIdx] : null} onSave={setPrice} onClose={() => setPriceIdx(null)} />
       <Toast />
+      <OfflineBanner />
     </div>
   );
 }
