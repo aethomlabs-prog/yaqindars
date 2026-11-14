@@ -1,10 +1,12 @@
 /* Profil tabi: iOS «Settings» uslubidagi guruhlangan ro‘yxat. */
-import { Baby, Bell, BellRing, ClipboardList, Heart, Info, MapPin, Moon, RotateCcw, Shield, Store } from "lucide-react";
-import { Avatar, CountBadge, Segmented, Switch } from "../../components/ios/controls";
+import { Baby, Bell, BellRing, ClipboardList, Heart, Info, MapPin, Moon, RotateCcw, Shield, Store, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Sheet } from "../../components/ios/Sheet";
+import { Avatar, Button, CountBadge, Segmented, Switch } from "../../components/ios/controls";
 import { Row, Section } from "../../components/ios/Grouped";
 import { Page } from "../../components/ios/Page";
 import { openLink, openTelegramLink, tgUser } from "../../lib/telegram";
-import { displayName, IS_DEMO, useApp, useApplications, useProfile, useSettings, type ThemePref, useBotUsername } from "../../store/app";
+import { deleteMyData, displayName, IS_DEMO, useApp, useApplications, useProfile, useSettings, type ThemePref, useBotUsername } from "../../store/app";
 import { useNav } from "../../store/nav";
 
 export function ProfileScreen() {
@@ -20,6 +22,23 @@ export function ProfileScreen() {
   const backend = useApp((s) => s.backend);
   const apps = useApplications();
   const activeApps = apps.filter((a) => a.status === "new" || a.status === "seen").length;
+  const showToast = useApp((s) => s.showToast);
+  const [delOpen, setDelOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const doDelete = async () => {
+    setDeleting(true);
+    try {
+      const r = await deleteMyData();
+      setDelOpen(false);
+      showToast(r === "pending" ? "So‘rov qabul qilindi — bot ishga tushishi bilan o‘chiriladi" : "Ma’lumotlaringiz o‘chirildi", "ok");
+      setTimeout(() => location.reload(), 1500);
+    } catch {
+      showToast("O‘chirib bo‘lmadi. Internetni tekshiring yoki botda /delete yozing.", "error");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const resetDemo = () => {
     try {
@@ -82,6 +101,35 @@ export function ProfileScreen() {
         <Row icon={<Info size={17} />} iconBg="#8E8E93" title="Ilova haqida" chevron onClick={() => push({ name: "about" })} />
         <Row icon={<Shield size={17} />} iconBg="#34C759" title="Maxfiylik siyosati" chevron onClick={() => openLink(new URL("privacy", location.href.split("?")[0]).toString())} />
       </Section>
+
+      <Section footer="Profil, farzandlar, arizalar, chatlar va saqlanganlar butunlay o‘chiriladi.">
+        <Row icon={<Trash2 size={17} />} iconBg="#FF3B30" title="Ma’lumotlarimni o‘chirish" danger onClick={() => setDelOpen(true)} />
+      </Section>
+
+      <Sheet open={delOpen} onClose={() => !deleting && setDelOpen(false)} label="Ma’lumotlarni o‘chirish">
+        <div className="px-6 pb-2 pt-4 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-soft text-red-text">
+            <Trash2 size={26} aria-hidden />
+          </div>
+          <h2 className="mt-3 text-title">Hammasini o‘chiramizmi?</h2>
+          <p className="mt-2 text-subhead text-ink2">Quyidagilar serverdan va shu telefondan o‘chiriladi. Bu amalni qaytarib bo‘lmaydi.</p>
+          <ul className="mx-auto mt-4 max-w-[280px] space-y-1.5 text-left text-subhead">
+            {["Profil va sozlamalar", "Farzandlar", "Arizalar", "Markazlar bilan chatlar", "Saqlanganlar va manzillar"].map((x) => (
+              <li key={x} className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-red" aria-hidden /> {x}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-6 space-y-2">
+            <Button className="w-full !bg-[#D92D20]" loading={deleting} onClick={doDelete}>
+              Ha, hammasini o‘chirish
+            </Button>
+            <Button kind="plain" className="w-full" disabled={deleting} onClick={() => setDelOpen(false)}>
+              Bekor qilish
+            </Button>
+          </div>
+        </div>
+      </Sheet>
 
       {IS_DEMO && (
         <Section footer="Namuna arizalar, chatlar va profil ma’lumotlari o‘chiriladi.">

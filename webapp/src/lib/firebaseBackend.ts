@@ -381,6 +381,34 @@ export async function createFirebaseBackend(): Promise<Backend> {
       await deleteDoc(doc(db, "chats", chatId));
     },
 
+    async deleteMyData() {
+      if (!uid) return "local";
+      const ref = doc(db, "deleteRequests", uid);
+      await setDoc(ref, { status: "pending", createdAt: serverTimestamp() });
+      // Bot o‘chirib "done" qo‘yguncha kutamiz (bot o‘chiq bo‘lsa — so‘rov saqlanadi, keyin bajariladi)
+      return new Promise<"done" | "pending">((resolve) => {
+        const timer = setTimeout(() => {
+          unsub();
+          resolve("pending");
+        }, 20000);
+        const unsub = onSnapshot(
+          ref,
+          (s) => {
+            if (s.data()?.status === "done") {
+              clearTimeout(timer);
+              unsub();
+              resolve("done");
+            }
+          },
+          () => {
+            clearTimeout(timer);
+            unsub();
+            resolve("pending");
+          }
+        );
+      });
+    },
+
     async askAI(q, history, ctx) {
       if (uid && FUNCTIONS_URL) {
         try {

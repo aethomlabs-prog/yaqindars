@@ -95,6 +95,7 @@ CHATS = db.collection("chats")
 WAITLIST = db.collection("waitlist")
 LINKS = db.collection("tgLinks")  # Mini App -> Telegram tasdiqlash so'rovlari
 USERS = db.collection("users")
+DELETE_REQS = db.collection("deleteRequests")  # ilovadagi «Ma’lumotlarimni o‘chirish»
 
 SUBJECTS = ["Ingliz tili", "Matematika", "IT", "Rus tili", "Kimyo", "Biologiya", "Fizika", "Ona tili", "Sport", "Boshqa"]
 PRICE_MIN, PRICE_MAX = 10_000, 10_000_000
@@ -418,6 +419,7 @@ async def help_cmd(message: Message):
     text = (
         "/start — bosh menyu\n"
         "/markaz — markaz paneli (ro‘yxatdan o‘tish, guruhlar, bo‘sh joylar)\n"
+        "/delete — barcha ma’lumotlarimni o‘chirish\n"
         "/cancel — joriy amalni bekor qilish\n"
         "/id — Telegram ID’ingizni bilish\n\n"
         f"🔒 <a href=\"{PRIVACY_URL}\">Maxfiylik siyosati</a>"
@@ -1010,6 +1012,71 @@ async def reply_send(message: Message, state: FSMContext, bot: Bot):
     await notify_user(bot, chat.get("userTgId"), f"💬 <b>{escape(str(chat.get('centerName', 'Markaz')))}</b>:\n{escape(text)}")
 
 
+# ---------------- Ma'lumotlarni o'chirish (/delete va ilovadagi tugma) ----------------
+def _delete_query(q) -> int:
+    n = 0
+    for d in q.stream():
+        d.reference.delete()
+        n += 1
+    return n
+
+
+def delete_user_data(tg_id: int) -> dict:
+    """Foydalanuvchining barcha shaxsiy ma'lumotlari: profil, farzandlar, saqlanganlar, arizalar, chatlar, navbatlar.
+    Markaz egasining markazlari (ochiq biznes ma'lumoti) bu yerda o'chirilmaydi — admin orqali."""
+    out = {}
+    user_ref = USERS.document(str(tg_id))
+    out["farzandlar"] = _delete_query(user_ref.collection("children"))
+    out["saqlanganlar"] = _delete_query(user_ref.collection("favorites"))
+    user_ref.delete()
+    out["arizalar"] = _delete_query(APPS.where(filter=FieldFilter("tgUserId", "==", tg_id)))
+    chats = list(CHATS.where(filter=FieldFilter("userTgId", "==", tg_id)).stream())
+    for c in chats:
+        _delete_query(c.reference.collection("messages"))
+        c.reference.delete()
+    out["chatlar"] = len(chats)
+    out["navbatlar"] = _delete_query(WAITLIST.where(filter=FieldFilter("userTgId", "==", tg_id)))
+    # Telegram bog'lanishi: claim'ni olib tashlaymiz (anonim akkaunt boshqa hech narsani ko'ra olmaydi)
+    for link in LINKS.where(filter=FieldFilter("tg", "==", tg_id)).stream():
+        try:
+            fb_auth.set_custom_user_claims(link.id, None)
+        except Exception as e:  # noqa: BLE001
+            log.info("Claim olib tashlanmadi (%s): %s", link.id, e)
+        link.reference.delete()
+    return out
+
+
+def deleted_text(counts: dict) -> str:
+    parts = ", ".join(f"{k}: {v}" for k, v in counts.items() if v)
+    return "🗑 Ma’lumotlaringiz o‘chirildi." + (f"\n({parts})" if parts else "")
+
+
+@router.message(Command("delete"))
+async def delete_cmd(message: Message, state: FSMContext):
+    await state.clear()
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="🗑 Ha, o‘chirish", callback_data="del:yes", style="danger"),
+        InlineKeyboardButton(text="Bekor qilish", callback_data="del:no"),
+    ]])
+    await message.answer(
+        "⚠️ <b>Barcha ma’lumotlaringiz o‘chiriladi:</b>\n"
+        "profil, farzandlar, saqlanganlar, arizalar, chatlar va navbatlar.\n\n"
+        "Bu amalni qaytarib bo‘lmaydi. Davom etasizmi?",
+        reply_markup=kb,
+    )
+
+
+@router.callback_query(F.data.in_({"del:yes", "del:no"}))
+async def delete_confirm(call: CallbackQuery):
+    if call.data == "del:no":
+        await call.message.edit_text("Bekor qilindi. Ma’lumotlaringiz joyida.")
+        return await call.answer()
+    await call.answer("O‘chirilmoqda…")
+    counts = await asyncio.to_thread(delete_user_data, call.from_user.id)
+    log.info("Foydalanuvchi %s ma'lumotlarini o'chirdi: %s", call.from_user.id, counts)
+    await call.message.edit_text(deleted_text(counts))
+
+
 # ---------------- Admin: approve / reject ----------------
 @router.callback_query(F.data.startswith(("ap:", "rj:")))
 async def admin_decide(call: CallbackQuery, bot: Bot):
@@ -1285,6 +1352,30 @@ def start_seats_watcher(bot: Bot, loop: asyncio.AbstractEventLoop):
     return CENTERS.where(filter=FieldFilter("approved", "==", True)).on_snapshot(on_snapshot)
 
 
+# ---------------- Ilovadan o'chirish so'rovi ----------------
+async def process_delete_request(bot: Bot, ref):
+    try:
+        tg_id = int(ref.id)
+    except ValueError:
+        return
+    counts = await asyncio.to_thread(delete_user_data, tg_id)
+    await asyncio.to_thread(ref.set, {"status": "done", "doneAt": firestore.SERVER_TIMESTAMP})
+    log.info("Ilova orqali o'chirildi %s: %s", tg_id, counts)
+    try:
+        await bot.send_message(tg_id, deleted_text(counts) + "\n\nIlova orqali so‘ralgan.")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def start_delete_watcher(bot: Bot, loop: asyncio.AbstractEventLoop):
+    def on_snapshot(_docs, changes, _read_time):
+        for ch in changes:
+            if ch.type.name in ("ADDED", "MODIFIED") and as_dict(ch.document).get("status") == "pending":
+                asyncio.run_coroutine_threadsafe(process_delete_request(bot, ch.document.reference), loop)
+
+    return DELETE_REQS.where(filter=FieldFilter("status", "==", "pending")).on_snapshot(on_snapshot)
+
+
 # ---------------- Weekly reminder ----------------
 async def reminder_loop(bot: Bot):
     while True:
@@ -1335,6 +1426,7 @@ async def main():
         BotCommand(command="start", description="Bosh menyu"),
         BotCommand(command="markaz", description="Markazni qo‘shish / boshqarish"),
         BotCommand(command="help", description="Yordam"),
+        BotCommand(command="delete", description="Ma’lumotlarimni o‘chirish"),
         BotCommand(command="cancel", description="Bekor qilish"),
     ])
 
@@ -1348,6 +1440,7 @@ async def main():
     chats = start_chat_watcher(bot, loop)
     statuses = start_status_watcher(bot, loop)
     seats = start_seats_watcher(bot, loop)
+    deletes = start_delete_watcher(bot, loop)
     reminder = asyncio.create_task(reminder_loop(bot))
     log.info("Bot ishga tushdi. Adminlar: %s", ", ".join(map(str, ADMIN_IDS)) or "yo‘q")
     try:
@@ -1358,6 +1451,7 @@ async def main():
         chats.unsubscribe()
         statuses.unsubscribe()
         seats.unsubscribe()
+        deletes.unsubscribe()
         reminder.cancel()
         await bot.session.close()
 

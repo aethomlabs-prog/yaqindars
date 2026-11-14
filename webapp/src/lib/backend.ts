@@ -70,6 +70,9 @@ export interface Backend {
   /** Markaz «yozmoqda…» (faqat DEMO simulyatsiya) */
   onTyping?(cb: (chatId: string, typing: boolean) => void): Unsub;
 
+  /** Barcha shaxsiy ma’lumotlarni o‘chirish: "done" — serverda o‘chirildi; "local" — faqat qurilmada edi */
+  deleteMyData(): Promise<"done" | "local" | "pending">;
+
   /** fallback=true — LLM ishlamadi, javob qoidaga asoslangan qidiruvdan */
   askAI(
     query: string,

@@ -318,6 +318,19 @@ export function useApplications(): Application[] {
   return authed ? remote : local;
 }
 
+/** «Ma’lumotlarimni o‘chirish»: serverda (bot orqali) va shu qurilmada */
+export async function deleteMyData(): Promise<"done" | "local" | "pending"> {
+  const b = useApp.getState().backend;
+  const res = b ? await b.deleteMyData() : "local";
+  try {
+    ["yd-profile", "yd-profile-demo", "yd-register-draft", "yd-last-phone"].forEach((k) => localStorage.removeItem(k));
+  } catch {
+    /* private rejim */
+  }
+  useProfile.setState({ children: [], favorites: [], addresses: [], activeAddressId: null, localApps: [], recentSearches: [], aiMessages: [] });
+  return res;
+}
+
 export async function submitApplication(input: Parameters<Backend["submitApplication"]>[0]): Promise<Application> {
   const b = useApp.getState().backend;
   if (!b) throw new Error("not ready");

@@ -208,6 +208,15 @@ export function createDemoBackend(): Backend {
       return () => typingListeners.delete(cb);
     },
 
+    async deleteMyData() {
+      try {
+        localStorage.removeItem(KEY);
+      } catch {
+        /* private rejim */
+      }
+      return "done";
+    },
+
     async askAI(query, _history, ctx) {
       await new Promise((r) => setTimeout(r, 1100));
       return { ...ruleBasedReply(ctx.centers.length ? ctx.centers : DEMO_CENTERS, query, ctx.pos || RISHTON), fallback: true };

@@ -45,6 +45,16 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // «Ma'lumotlarimni o'chirish»: foydalanuvchi so'rov qoldiradi, o'chirishni bot (Admin SDK) bajaradi.
+    match /deleteRequests/{tgId} {
+      allow read: if tg() != null && string(tg()) == tgId;
+      allow create, update: if tg() != null && string(tg()) == tgId
+        && request.resource.data.keys().hasOnly(['status', 'createdAt'])
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+      allow delete: if false;
+    }
+
     // Profil: faqat egasi (hujjat ID = Telegram ID).
     match /users/{tgId} {
       allow read, write: if tg() != null && string(tg()) == tgId;
