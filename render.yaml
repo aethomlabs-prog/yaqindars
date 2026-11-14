@@ -1,0 +1,18 @@
+# Render Blueprint: bot fon xizmati (worker) sifatida, xato bo'lsa avtomatik qayta ishga tushadi.
+services:
+  - type: worker
+    name: yaqindars-bot
+    runtime: docker
+    rootDir: bot
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    autoDeploy: true
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: WEBAPP_URL
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false

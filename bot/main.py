@@ -7,6 +7,7 @@
 - Admin: tasdiqlash / rad etish, /vip, /stat
 """
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -35,8 +36,10 @@ except ValueError:
     sys.exit("XATO: ADMIN_IDS faqat raqamlardan iborat bo‘lsin (vergul bilan), masalan: 123456789,987654321")
 if not WEBAPP_URL.startswith("https://"):
     sys.exit("XATO: WEBAPP_URL https:// bilan boshlanishi kerak (Telegram faqat HTTPS Mini App’ni ochadi).")
-if not os.path.isfile(CRED_PATH):
-    sys.exit(f"XATO: Firebase service account fayli topilmadi: {CRED_PATH}")
+# Bulutda (Railway/Render) fayl o'rniga butun JSON'ni FIREBASE_CREDENTIALS_JSON o'zgaruvchisiga qo'yish mumkin
+CRED_JSON = os.getenv("FIREBASE_CREDENTIALS_JSON", "").strip()
+if not CRED_JSON and not os.path.isfile(CRED_PATH):
+    sys.exit(f"XATO: Firebase service account topilmadi: {CRED_PATH} (yoki FIREBASE_CREDENTIALS_JSON ni bering)")
 
 def _with_param(url: str, key: str, value: str) -> str:
     parts = urlsplit(url)
@@ -87,7 +90,7 @@ from parsers import (  # noqa: E402
     validate_init_data,
 )
 
-firebase_admin.initialize_app(credentials.Certificate(CRED_PATH))
+firebase_admin.initialize_app(credentials.Certificate(json.loads(CRED_JSON) if CRED_JSON else CRED_PATH))
 db = firestore.client()
 CENTERS = db.collection("centers")
 APPS = db.collection("applications")
@@ -1453,7 +1456,13 @@ async def reminder_loop(bot: Bot):
 
 # ---------------- Main ----------------
 async def main():
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        stream=sys.stdout,  # Railway/Render/Docker loglari stdout'dan o'qiladi
+        force=True,
+    )
+    logging.getLogger("aiogram.event").setLevel(logging.WARNING)
     bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
     dp.include_router(router)

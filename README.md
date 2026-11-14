@@ -231,3 +231,37 @@ avtomatik hisoblanadi), «Joy bo‘shasa xabar ber», sinov darsidan 24 soat old
 
 Bot o‘chiq bo‘lsa, Mini App 10 soniyadan keyin mehmon rejimida ochiladi (xarita va arizalar ishlaydi).
 AI yordamchi hozircha qoidaga asoslangan qidiruv bilan ishlaydi (LLM uchun server kerak).
+
+---
+
+## Botni 24/7 ishlatish (Railway yoki Render)
+
+Bot polling rejimida ishlaydi: **bir vaqtda faqat bitta nusxa** ishlashi kerak (kompyuterdagi botni o‘chiring).
+Maxfiy fayllar konteynerga kirmaydi (`bot/.dockerignore`) — hammasi muhit o‘zgaruvchilari orqali beriladi:
+
+| O‘zgaruvchi | Qiymat |
+|---|---|
+| `BOT_TOKEN` | @BotFather tokeni |
+| `WEBAPP_URL` | Vercel manzili, masalan `https://yaqindars.vercel.app/` |
+| `ADMIN_IDS` | admin Telegram ID(lar)i, vergul bilan |
+| `FIREBASE_CREDENTIALS_JSON` | `serviceAccount.json` faylining **butun matni** (bitta qatorga) |
+| `LOG_LEVEL` | ixtiyoriy: `INFO` (standart) yoki `DEBUG` |
+
+**Railway** (oddiyroq): railway.com → New Project → Deploy from GitHub repo → `yaqindars` →
+Settings → **Root Directory: `bot`** (`bot/railway.json` va `Dockerfile` o‘zi topiladi) → Variables bo‘limiga
+yuqoridagilarni kiriting → Deploy. `restartPolicyType: ALWAYS` — bot yiqilsa avtomatik qayta ishga tushadi.
+Loglar: servis → **Deployments → View Logs**.
+
+**Render**: render.com → New → **Blueprint** → repo’ni tanlang (`render.yaml` o‘qiladi) → o‘zgaruvchilarni
+kiriting → Apply. Background Worker pullik (Starter). Loglar: servis → **Logs**.
+
+**Istalgan VPS (Docker):**
+```bash
+cd bot
+docker build -t yaqindars-bot .
+docker run -d --name yaqindars-bot --restart unless-stopped --env-file .env \
+  -e FIREBASE_CREDENTIALS_JSON="$(cat serviceAccount.json)" yaqindars-bot
+docker logs -f yaqindars-bot
+```
+
+Har push’da Railway/Render botni o‘zi qayta joylaydi. Xatolar loglarda va Firestore’dagi `logs` kolleksiyasida ko‘rinadi.
