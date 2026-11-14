@@ -46,7 +46,7 @@ yaqindars/
 - `/stat` — markazlar, tasdiqlanganlar, VIP va arizalar soni
 
 **Biznes-model:** ota-onalar uchun bepul; markazlar uchun 1-oy bepul, keyin Oddiy — 75 000 so‘m/oy,
-VIP — 145 000 so‘m/oy. To‘lov hozircha qo‘lda (admin `/vip` bilan yoqadi), avtomatik to‘lov — keyingi bosqichda.
+VIP — 150 000 so‘m/oy. To‘lov hozircha qo‘lda (admin `/vip` bilan yoqadi), avtomatik to‘lov — keyingi bosqichda.
 
 ---
 
@@ -202,7 +202,7 @@ Kunlar: `Du Se Ch Pa Ju Sh Ya`. Fanlar: Ingliz tili, Matematika, IT, Rus tili, K
 
 - **Spamdan himoya:** arizani to‘g‘ridan-to‘g‘ri Firestore’ga emas, Telegram `initData` imzosini tekshiradigan
   Cloud Function orqali qabul qilish; keyin `applications` ga create qoidasini yopish.
-- **To‘lov:** Payme / Click orqali obuna (Oddiy 75 000, VIP 145 000 so‘m), muddati tugaganda markazni yashirish.
+- **To‘lov:** Payme / Click orqali obuna (Oddiy 75 000, VIP 150 000 so‘m), muddati tugaganda markazni yashirish.
 - **Reyting:** sinov darsidan 2–3 kun keyin bot ota-onadan baho so‘raydi → `rating` hisoblanadi.
 - **Xarita plitkalari:** OpenStreetMap’ning bepul serveri katta yuklama uchun emas — foydalanuvchilar
   ko‘paysa MapTiler / Stadia / Yandex plitkalariga o‘tish (`app.js` dagi `L.tileLayer` manzili).

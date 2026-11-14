@@ -258,7 +258,7 @@ export default function OwnerApp() {
                 </div>
                 {center.tariff && (
                   <div className="tnum mt-2 text-footnote text-ink2">
-                    Tarif: {center.tariff === "vip" ? "VIP — 145 000" : "Oddiy — 75 000"} so‘m/oy
+                    Tarif: {center.tariff === "vip" ? "VIP — 150 000" : "Oddiy — 75 000"} so‘m/oy
                   </div>
                 )}
               </div>

@@ -10,7 +10,7 @@ export const TARIFFS: Record<Tariff, { title: string; price: number; perks: stri
   },
   vip: {
     title: "VIP",
-    price: 145000,
+    price: 150000,
     perks: ["Oddiy tarifdagi hammasi", "Ro‘yxatda birinchi o‘rinda", "Xaritada oltin belgi", "«Tavsiya etilgan» bo‘limida"]
   }
 };
