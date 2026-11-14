@@ -9,6 +9,7 @@ import { fmtSum } from "../../lib/format";
 import { distanceKm, formatDistance } from "../../lib/geo";
 import { newId, useApp, useOrigin, useProfile } from "../../store/app";
 import { useNav } from "../../store/nav";
+import { inTelegram } from "../../lib/telegram";
 
 const SUGGESTIONS = ["Ingliz tili, 300 minggacha", "Shanba kuni matematika", "Uyga yaqin IT kurslari", "Bo‘sh joyi bor sport to‘garagi"];
 
@@ -83,6 +84,13 @@ export function AiChatPage() {
           <h2 className="mt-3 text-headline">Mos markazni topib beraman</h2>
           <p className="mt-1 text-footnote text-ink2">Fan, narx, kun va masofani yozing. Bo‘sh joyi borlarini birinchi ko‘rsataman.</p>
           {(fallback || !backend?.aiEnabled) && <p className="mt-2 rounded-full bg-fill px-3 py-1 text-caption text-ink2">Oddiy qidiruv rejimi</p>}
+          {backend && !backend.authed && backend.mode === "firebase" && (
+            <p className="mt-3 rounded-card bg-gold-soft px-4 py-3 text-footnote text-gold-text">
+              {inTelegram
+                ? "To‘liq AI yordamchi uchun ilovani botdagi «Ochish» tugmasi (yozish maydoni yonida) yoki «🚀 YaqinDars’ni ochish» orqali oching."
+                : "To‘liq AI yordamchi Telegram ichida ishlaydi: @yaqindars_bot → «Ochish»."}
+            </p>
+          )}
         </div>
 
         {msgs.map((m, i) => {

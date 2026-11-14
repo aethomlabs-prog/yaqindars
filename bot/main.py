@@ -354,7 +354,9 @@ def main_menu() -> ReplyKeyboardMarkup:
         keyboard=[
             [
                 KeyboardButton(text=BTN_INSTALL, style="success"),  # bosilganda bot havola tugmasini yuboradi
-                KeyboardButton(text=BTN_OPEN, web_app=WebAppInfo(url=WEBAPP_URL), style="primary"),
+                # Matn tugmasi: klaviatura tugmasidan ochilgan Mini App foydalanuvchi ma'lumotini (initData) OLMAYDI —
+                # shunda AI, chat, kabinet ishlamaydi. Bot inline tugma yuboradi, u to'liq rejimda ochadi.
+                KeyboardButton(text=BTN_OPEN, style="primary"),
             ],
             [KeyboardButton(text=BTN_ADMIN), KeyboardButton(text=BTN_TEACHER)],
         ],
@@ -403,9 +405,8 @@ async def menu_open(message: Message, state: FSMContext):
             "Shundan keyin YaqinDars bosh ekranda alohida ilova bo‘lib turadi va Telegram’siz ochiladi.",
             reply_markup=kb,
         )
-    # Eski Telegram'da web_app reply tugmasi oddiy matn bo'lib keladi — inline tugma bilan javob beramiz
-    kb = InlineKeyboardMarkup(inline_keyboard=[[ibtn("🚀 Ochish", WEBAPP_URL, "primary")]])
-    await message.answer("Pastdagi tugmani bosing 👇", reply_markup=kb)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[ibtn("🚀 YaqinDars’ni ochish", WEBAPP_URL, "primary")]])
+    await message.answer("Ilovani ochish uchun tugmani bosing 👇\n(yoki yozish maydoni yonidagi «Ochish» tugmasi)", reply_markup=kb)
 
 
 @router.message(F.text == BTN_TEACHER)
