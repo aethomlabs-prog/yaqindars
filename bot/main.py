@@ -12,7 +12,7 @@ import os
 import sys
 from datetime import datetime, timedelta, timezone
 from html import escape
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 
@@ -49,6 +49,7 @@ def _with_param(url: str, key: str, value: str) -> str:
 REGISTER_URL = _with_param(WEBAPP_URL, "mode", "register")
 INSTALL_URL = _with_param(WEBAPP_URL, "install", "1")  # ilova ochilishi bilan «Bosh ekranga qo‘shish»
 OWNER_URL = _with_param(WEBAPP_URL, "mode", "owner")  # ta'lim beruvchi kabineti
+PRIVACY_URL = urljoin(WEBAPP_URL.split("?")[0], "privacy")  # webapp/public/privacy.html
 
 import firebase_admin  # noqa: E402
 from aiogram import Bot, Dispatcher, F, Router  # noqa: E402
@@ -418,11 +419,12 @@ async def help_cmd(message: Message):
         "/start — bosh menyu\n"
         "/markaz — markaz paneli (ro‘yxatdan o‘tish, guruhlar, bo‘sh joylar)\n"
         "/cancel — joriy amalni bekor qilish\n"
-        "/id — Telegram ID’ingizni bilish"
+        "/id — Telegram ID’ingizni bilish\n\n"
+        f"🔒 <a href=\"{PRIVACY_URL}\">Maxfiylik siyosati</a>"
     )
     if is_admin(message.from_user.id):
         text += "\n\nAdmin:\n/vip MARKAZ_ID — VIP ni yoqish/o‘chirish\n/stat — statistika"
-    await message.answer(text)
+    await message.answer(text, disable_web_page_preview=True)
 
 
 @router.message(Command("id"))

@@ -1,0 +1,135 @@
+<!doctype html>
+<!--
+  QORALAMA: bu matn ilova va bot haqiqatan yig'adigan ma'lumotlarga asoslanib yozilgan.
+  Yuridik tekshiruvdan o'tkazing va "Bog'lanish" bo'limiga rasmiy nom/manzilni qo'shing.
+  O'z faylingiz bo'lsa — shu faylning o'rniga qo'ying (manzil: /privacy).
+-->
+<html lang="uz">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Maxfiylik siyosati — YaqinDars</title>
+    <meta name="description" content="YaqinDars qanday ma’lumotlarni yig‘adi, nima uchun ishlatadi va qancha saqlaydi." />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <style>
+      :root {
+        --bg: #f2f2f7;
+        --card: #ffffff;
+        --ink: #14213d;
+        --ink2: #565e6c;
+        --line: rgba(20, 33, 61, 0.08);
+        --tint: #1e6fd9;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #000000;
+          --card: #1c1c1e;
+          --ink: #ffffff;
+          --ink2: #b4b4bc;
+          --line: rgba(255, 255, 255, 0.09);
+          --tint: #3b8bff;
+          color-scheme: dark;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 16px/1.6 Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+      header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: var(--ink2); font-size: 15px; }
+      h1 { font-size: 30px; line-height: 1.2; margin: 8px 0 4px; letter-spacing: -0.4px; }
+      .updated { color: var(--ink2); font-size: 14px; margin-bottom: 20px; }
+      section { background: var(--card); border-radius: 18px; padding: 18px 18px 6px; margin: 12px 0; box-shadow: 0 0 0 1px var(--line); }
+      h2 { font-size: 19px; margin: 0 0 8px; }
+      p, li { color: var(--ink); }
+      ul { padding-left: 20px; margin: 6px 0 12px; }
+      li { margin: 4px 0; }
+      .muted { color: var(--ink2); font-size: 15px; }
+      a { color: var(--tint); }
+      table { width: 100%; border-collapse: collapse; margin: 6px 0 14px; font-size: 15px; }
+      th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+      th { color: var(--ink2); font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <svg width="22" height="26" viewBox="0 0 100 120" aria-hidden="true"><path d="M50 4 C26 4 8 22 8 46 C8 76 50 116 50 116 C50 116 92 76 92 46 C92 22 74 4 50 4 Z" fill="#1E6FD9"/><circle cx="50" cy="46" r="27" fill="#fff"/><path d="M33 37 Q41 32 49 37.5 L49 58 Q41 53 33 57 Z" fill="#1E6FD9"/><path d="M67 37 Q59 32 51 37.5 L51 58 Q59 53 67 57 Z" fill="#1E6FD9"/><circle cx="80" cy="16" r="10" fill="#22B573"/></svg>
+        YaqinDars
+      </header>
+      <h1>Maxfiylik siyosati</h1>
+      <div class="updated">Oxirgi yangilanish: 2026-yil 14-noyabr</div>
+
+      <section>
+        <h2>Qisqacha</h2>
+        <ul>
+          <li>Telefon raqamingiz faqat siz ariza yuborgan markazga ko‘rinadi.</li>
+          <li>Ma’lumotlaringizni sotmaymiz va reklama uchun ishlatmaymiz.</li>
+          <li>Hammasini istalgan vaqtda o‘chirishingiz mumkin: ilovada <b>Profil → Ma’lumotlarimni o‘chirish</b> yoki botda <b>/delete</b>.</li>
+          <li>Arizalar 12 oydan keyin avtomatik o‘chiriladi.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Qanday ma’lumotlarni yig‘amiz</h2>
+        <table>
+          <tr><th>Ma’lumot</th><th>Nima uchun</th></tr>
+          <tr><td>Telegram ID, ism, username</td><td>Sizni tanish, Telegram orqali xabar yuborish (ariza holati, markaz javobi, eslatmalar)</td></tr>
+          <tr><td>Ariza: ism, telefon, guruh, izoh</td><td>Markaz siz bilan bog‘lanib, sinov darsini belgilashi uchun</td></tr>
+          <tr><td>Farzandlar: ism, yosh, sinf, qiziqishlar</td><td>Arizani tez to‘ldirish va mos markazlarni ko‘rsatish (ixtiyoriy)</td></tr>
+          <tr><td>Saqlangan manzillar (Uy, Maktab…)</td><td>Markazgacha masofani hisoblash (ixtiyoriy)</td></tr>
+          <tr><td>Joriy joylashuv</td><td>Faqat qurilmangizda masofani hisoblash uchun ishlatiladi, serverga yuborilmaydi</td></tr>
+          <tr><td>Markaz bilan chat xabarlari</td><td>Xabarni markazga yetkazish va javobni sizga ko‘rsatish</td></tr>
+          <tr><td>Saqlanganlar, bildirishnoma sozlamalari, mavzu</td><td>Ilovani sizga moslash</td></tr>
+          <tr><td>Texnik xato yozuvlari (vaqt, ekran, qurilma turi, xato matni)</td><td>Xatolarni topish va tuzatish. Ular faqat administratorga ko‘rinadi</td></tr>
+        </table>
+        <p class="muted">Markazlar va repetitorlar uchun: ro‘yxatdan o‘tishda kiritilgan nom, manzil, xaritadagi joy, telefon, guruhlar va o‘qituvchilar haqidagi ma’lumot ilovada hammaga ochiq ko‘rsatiladi.</p>
+      </section>
+
+      <section>
+        <h2>Kim ko‘radi</h2>
+        <ul>
+          <li><b>Siz tanlagan markaz</b> — faqat o‘sha markazga yuborilgan ariza va chat xabarlaringizni.</li>
+          <li><b>Administrator</b> — xizmatni yuritish, markazlarni tasdiqlash va murojaatlarga javob berish uchun.</li>
+          <li><b>Texnik xizmatlar</b>: ma’lumotlar Google Firebase’da saqlanadi; ilova Vercel’da joylashgan; xarita plitkalari OpenStreetMap va Esri serverlaridan yuklanadi (ularga joylashuvingiz yuborilmaydi, faqat xaritaning ko‘rinayotgan qismi so‘raladi).</li>
+        </ul>
+        <p>Ma’lumotlarni uchinchi shaxslarga sotmaymiz va reklama maqsadida bermaymiz.</p>
+      </section>
+
+      <section>
+        <h2>Qancha saqlaymiz</h2>
+        <ul>
+          <li>Arizalar — yuborilgan kundan boshlab <b>12 oy</b>, keyin avtomatik o‘chiriladi.</li>
+          <li>Profil, farzandlar, manzillar, saqlanganlar va chatlar — siz o‘chirmaguningizcha.</li>
+          <li>Texnik xato yozuvlari — muammo tuzatilguncha, ko‘pi bilan 90 kun.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Sizning huquqlaringiz</h2>
+        <ul>
+          <li><b>Hammasini o‘chirish:</b> ilovada Profil → «Ma’lumotlarimni o‘chirish» yoki botda <b>/delete</b>. Profil, farzandlar, arizalar, chatlar va saqlanganlar darhol o‘chadi.</li>
+          <li><b>Bildirishnomalardan voz kechish:</b> Profil → Bildirishnomalar.</li>
+          <li><b>Joylashuvni bermaslik:</b> ilova joylashuvsiz ham ishlaydi — masofa Rishton markazidan hisoblanadi.</li>
+          <li><b>Savol yoki shikoyat:</b> botda «💬 Admin bilan bog‘lanish».</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Bolalar haqida ma’lumot</h2>
+        <p>Farzandlar haqidagi ma’lumotni faqat ota-ona yoki vasiy kiritadi va u faqat ariza to‘ldirish uchun ishlatiladi. Bu ma’lumot markazlarga ochiq ko‘rsatilmaydi — markaz faqat siz yuborgan arizani ko‘radi.</p>
+      </section>
+
+      <section>
+        <h2>O‘zgarishlar va bog‘lanish</h2>
+        <p>Siyosat o‘zgarsa, shu sahifadagi sana yangilanadi; muhim o‘zgarishlar haqida botda xabar beramiz.</p>
+        <p>Bog‘lanish: Telegram botdagi «💬 Admin bilan bog‘lanish» tugmasi.</p>
+      </section>
+    </main>
+  </body>
+</html>

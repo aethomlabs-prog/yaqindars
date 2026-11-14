@@ -1,9 +1,9 @@
 /* Profil tabi: iOS «Settings» uslubidagi guruhlangan ro‘yxat. */
-import { Baby, Bell, BellRing, ClipboardList, Heart, Info, MapPin, Moon, RotateCcw, Store } from "lucide-react";
+import { Baby, Bell, BellRing, ClipboardList, Heart, Info, MapPin, Moon, RotateCcw, Shield, Store } from "lucide-react";
 import { Avatar, CountBadge, Segmented, Switch } from "../../components/ios/controls";
 import { Row, Section } from "../../components/ios/Grouped";
 import { Page } from "../../components/ios/Page";
-import { openTelegramLink, tgUser } from "../../lib/telegram";
+import { openLink, openTelegramLink, tgUser } from "../../lib/telegram";
 import { displayName, IS_DEMO, useApp, useApplications, useProfile, useSettings, type ThemePref, useBotUsername } from "../../store/app";
 import { useNav } from "../../store/nav";
 
@@ -80,6 +80,7 @@ export function ProfileScreen() {
           <Row icon={<Store size={17} />} iconBg="#13804F" title="Markazingizni qo‘shing" subtitle="Bot orqali, 1-oy bepul" chevron onClick={() => openTelegramLink(`https://t.me/${BOT_USERNAME}?start=markaz`)} />
         )}
         <Row icon={<Info size={17} />} iconBg="#8E8E93" title="Ilova haqida" chevron onClick={() => push({ name: "about" })} />
+        <Row icon={<Shield size={17} />} iconBg="#34C759" title="Maxfiylik siyosati" chevron onClick={() => openLink(new URL("privacy", location.href.split("?")[0]).toString())} />
       </Section>
 
       {IS_DEMO && (

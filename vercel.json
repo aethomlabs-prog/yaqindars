@@ -3,5 +3,6 @@
   "framework": "vite",
   "installCommand": "cd webapp && npm install",
   "buildCommand": "cd webapp && npm run build",
-  "outputDirectory": "webapp/dist"
+  "outputDirectory": "webapp/dist",
+  "cleanUrls": true
 }
