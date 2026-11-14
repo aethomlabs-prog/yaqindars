@@ -13,14 +13,17 @@ service cloud.firestore {
     // Arizalar: Mini App faqat YANGI ariza yarata oladi. O'qish/o'zgartirish/o'chirish — faqat bot.
     match /applications/{id} {
       function validApplication(d) {
-        return d.keys().hasOnly(['centerId', 'centerName', 'group', 'name', 'phone',
-                                 'tgUserId', 'tgUsername', 'createdAt', 'notified', 'status'])
+        return d.keys().hasOnly(['centerId', 'centerName', 'group', 'groupIndex', 'name', 'phone',
+                                 'childId', 'comment', 'tgUserId', 'tgUsername', 'createdAt', 'notified', 'status'])
           && d.keys().hasAll(['centerId', 'name', 'phone', 'createdAt', 'notified', 'status'])
           && d.centerId is string && d.centerId.size() > 0 && d.centerId.size() <= 64
           && (!('centerName' in d) || (d.centerName is string && d.centerName.size() <= 100))
           && (!('group' in d) || (d.group is string && d.group.size() <= 120))
           && d.name is string && d.name.size() >= 2 && d.name.size() <= 60
           && d.phone is string && d.phone.matches('^\\+998[0-9]{9}$')
+          && (!('groupIndex' in d) || (d.groupIndex is int && d.groupIndex >= 0 && d.groupIndex < 20))
+          && (!('childId' in d) || d.childId == null || (d.childId is string && d.childId.size() <= 64))
+          && (!('comment' in d) || (d.comment is string && d.comment.size() <= 300))
           && (!('tgUserId' in d) || d.tgUserId == null || d.tgUserId is int)
           && (!('tgUsername' in d) || d.tgUsername == null
               || (d.tgUsername is string && d.tgUsername.size() <= 64))

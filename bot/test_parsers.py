@@ -1,7 +1,9 @@
 """Parser testlari. Ishga tushirish:  python -m unittest test_parsers -v   (bot/ papkasida)"""
 import unittest
 
-from parsers import normalize_phone, parse_days, parse_int, parse_time
+import json
+
+from parsers import RegError, normalize_phone, parse_days, parse_int, parse_registration, parse_time
 
 
 class DaysTest(unittest.TestCase):
@@ -68,6 +70,43 @@ class PhoneTest(unittest.TestCase):
         self.assertIsNone(normalize_phone("12345"))
         self.assertIsNone(normalize_phone(""))
 
+
+
+def _reg(**over):
+    d = {
+        "v": 1, "t": "vip", "k": "center", "n": "Bilimdon  markazi", "p": "+998 90 123 45 67",
+        "a": "Rishton, Navoiy 5", "la": 40.3567, "lo": 71.2847, "d": "Yaxshi markaz", "af": 7, "at": 17,
+        "am": ["Wi-Fi"], "g": [["Ingliz tili", "Du,Ch,Ju", "16:00–17:30", 300000, 3]],
+        "tc": [["Nilufar Rahimova", "Ingliz tili", 8, "IELTS 8.0"]],
+    }
+    d.update(over)
+    return json.dumps(d, ensure_ascii=False)
+
+
+class RegistrationTest(unittest.TestCase):
+    def test_valid(self):
+        r = parse_registration(_reg())
+        self.assertEqual(r["tariff"], "vip")
+        self.assertEqual(r["name"], "Bilimdon markazi")
+        self.assertEqual(r["phone"], "+998901234567")
+        self.assertEqual(r["groups"][0], {"subject": "Ingliz tili", "days": ["Du", "Ch", "Ju"], "time": "16:00–17:30", "price": 300000, "freeSeats": 3})
+        self.assertEqual(r["teachers"][0]["experience"], 8)
+
+    def test_rejects(self):
+        bad = [
+            _reg(t="gold"), _reg(p="123"), _reg(la=None), _reg(la=200), _reg(g=[]),
+            _reg(g=[["IT", "Xx", "16:00–17:00", 100000, 1]]), _reg(g=[["IT", "Du", "17:00–16:00", 100000, 1]]),
+            _reg(g=[["IT", "Du", "16:00–17:00", 5, 1]]), _reg(g=[["IT", "Du", "16:00–17:00", 100000, True]]),
+            _reg(n="A"), _reg(v=2), "not json", "", _reg(tc=[["X", "IT", 1, ""]]),
+        ]
+        for raw in bad:
+            with self.assertRaises(RegError, msg=raw[:80]):
+                parse_registration(raw)
+
+    def test_optional_and_swap(self):
+        r = parse_registration(_reg(af=17, at=7, tc=[], am=[], d=""))
+        self.assertEqual((r["ageFrom"], r["ageTo"]), (7, 17))
+        self.assertEqual(r["teachers"], [])
 
 if __name__ == "__main__":
     unittest.main()

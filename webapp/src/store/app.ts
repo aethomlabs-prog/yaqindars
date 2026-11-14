@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { FIREBASE_CONFIG, FORCE_DEMO } from "../../config";
 import type { Backend, ProfileDoc } from "../lib/backend";
-import { getCurrentPosition, RISHTON } from "../lib/geo";
+import { getCurrentPosition, RISHTON, watchPosition } from "../lib/geo";
 import { haptic, tgUser } from "../lib/telegram";
 import type { Address, Application, Center, Chat, Child, LatLng, Message } from "../lib/types";
 
@@ -162,6 +162,8 @@ interface AppState {
   centers: Center[];
   centersStatus: "idle" | "loading" | "ready" | "error";
   userPos: LatLng | null;
+  /** joylashuv aniqligi, metr */
+  userAcc: number | null;
   locating: boolean;
   chats: Chat[];
   apps: Application[];
@@ -171,6 +173,8 @@ interface AppState {
   boot: () => Promise<void>;
   loadCenters: () => Promise<void>;
   locate: (explicit?: boolean) => Promise<LatLng | null>;
+  /** Xarita ochiq paytida joylashuvni jonli kuzatish; to‘xtatish funksiyasini qaytaradi */
+  watchLocation: () => () => void;
   showToast: (text: string, kind?: Toast["kind"]) => void;
   setAiEnabled: (v: boolean) => void;
 }
@@ -184,6 +188,7 @@ export const useApp = create<AppState>((set, get) => ({
   centers: [],
   centersStatus: "idle",
   userPos: null,
+  userAcc: null,
   locating: false,
   chats: [],
   apps: [],
@@ -240,9 +245,10 @@ export const useApp = create<AppState>((set, get) => ({
   locate: async (explicit = false) => {
     set({ locating: true });
     try {
-      const p = await getCurrentPosition();
-      set({ userPos: p, locating: false });
-      useProfile.getState().setActiveAddress(null);
+      const f = await getCurrentPosition();
+      const p = { lat: f.lat, lng: f.lng };
+      set({ userPos: p, userAcc: f.acc, locating: false });
+      if (explicit) useProfile.getState().setActiveAddress(null);
       return p;
     } catch {
       set({ locating: false });
@@ -250,6 +256,14 @@ export const useApp = create<AppState>((set, get) => ({
       return null;
     }
   },
+
+  watchLocation: () =>
+    watchPosition((f) => {
+      const prev = get().userPos;
+      // 3 m dan kam siljish — qayta chizmaymiz
+      if (prev && Math.abs(prev.lat - f.lat) < 3e-5 && Math.abs(prev.lng - f.lng) < 3e-5 && get().userAcc === f.acc) return;
+      set({ userPos: { lat: f.lat, lng: f.lng }, userAcc: f.acc });
+    }),
 
   showToast: (text, kind = "info") => {
     clearTimeout(toastTimer);

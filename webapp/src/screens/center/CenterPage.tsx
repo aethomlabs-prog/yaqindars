@@ -241,6 +241,28 @@ export function CenterPage({ centerId }: { centerId: string }) {
           {!c.groups.length && <p className="px-1 text-subhead text-ink2">Hozircha guruhlar qo‘shilmagan.</p>}
         </div>
 
+        {/* O‘qituvchilar */}
+        {c.teachers.length > 0 && (
+          <>
+            <h2 className="mb-2 mt-7 px-5 text-title">O‘qituvchilar</h2>
+            <div className="mx-4 overflow-hidden rounded-card bg-card">
+              {c.teachers.map((t, i) => (
+                <div key={i} className="group flex items-center gap-3 px-4">
+                  <Avatar name={t.name} size={48} />
+                  <div className="min-w-0 flex-1 py-3 [box-shadow:inset_0_-0.5px_0_var(--sep)] group-last:shadow-none">
+                    <div className="truncate text-headline">{t.name.replace(/^Namuna:\s*/, "")}</div>
+                    <div className="mt-0.5 text-footnote text-ink2">
+                      {t.subject}
+                      {t.experience ? ` · ${t.experience} yil tajriba` : ""}
+                    </div>
+                    {t.about && <div className="mt-0.5 text-footnote text-ink3">{t.about}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
         {/* Ma’lumot */}
         {c.description && (
           <>

@@ -5,19 +5,19 @@ import L from "leaflet";
 import "leaflet.markercluster";
 import { LocateFixed, MapPinOff, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Circle, MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
+import { Circle, MapContainer, Marker, useMap } from "react-leaflet";
 import { CenterRow } from "../../components/cards";
 import { PIN_PATH } from "../../components/brand";
 import { Chip, EmptyState } from "../../components/ios/controls";
 import { DetentSheet } from "../../components/ios/Sheet";
 import { Spinner } from "../../components/ios/Spinner";
 import { SUBJECTS } from "../../lib/match";
-import { haptic, onThemeChanged } from "../../lib/telegram";
+import { haptic, onThemeChanged, openLocationSettings } from "../../lib/telegram";
 import type { LatLng } from "../../lib/types";
 import { useApp, useOrigin } from "../../store/app";
 import { activeFilterCount, filterCenters, useFilters, type Visible } from "../../store/filters";
 import { useNav } from "../../store/nav";
-import { TILE_ATTR, TILE_URL } from "./MapPicker";
+import { BaseTiles, LayerToggle, MeMarker, useBaseLayer } from "./layers";
 import { FilterSheet } from "./FilterSheet";
 
 /* ---------- Marker ikonkalari ---------- */
@@ -40,8 +40,6 @@ function pinIcon(color: string, big: boolean, selected: boolean) {
   return icon;
 }
 const pinColor = (v: Visible) => (v.free <= 0 ? "#9AA5B8" : v.center.vip ? "#F5B700" : "#1E6FD9");
-
-const meIcon = L.divIcon({ className: "", html: '<div class="me-dot"></div>', iconSize: [18, 18], iconAnchor: [9, 9] });
 
 function clusterIcon(cluster: L.MarkerCluster) {
   const n = cluster.getChildCount();
@@ -114,7 +112,10 @@ export default function MapScreen() {
   const centers = useApp((s) => s.centers);
   const status = useApp((s) => s.centersStatus);
   const userPos = useApp((s) => s.userPos);
+  const userAcc = useApp((s) => s.userAcc);
   const locate = useApp((s) => s.locate);
+  const watchLocation = useApp((s) => s.watchLocation);
+  const [layer, setLayer] = useBaseLayer();
   const locating = useApp((s) => s.locating);
   const tab = useNav((s) => s.tab);
   const push = useNav((s) => s.push);
@@ -136,10 +137,19 @@ export default function MapScreen() {
     return () => ro.disconnect();
   }, []);
 
-  // Manba (manzil/GPS) o‘zgarsa — xarita o‘sha joyga
+  // Xarita tabi ochiq paytida — joylashuvni jonli kuzatamiz (birinchi marta ruxsat so‘raladi)
   useEffect(() => {
-    setFlyTo((x) => ({ p: pos, z: 15, n: (x?.n ?? 0) + 1 }));
-  }, [pos.lat, pos.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (tab !== "map") return;
+    if (!useApp.getState().userPos) locate(false);
+    return watchLocation();
+  }, [tab, locate, watchLocation]);
+
+  // Manba o‘zgarsa (manzil tanlandi yoki GPS birinchi marta topildi) — xarita o‘sha joyga.
+  // GPS har yangilanganda xarita sakramasin: faqat manba/manzil o‘zgarishida uchamiz.
+  const originKey = source === "gps" ? "gps" : `${source}:${pos.lat},${pos.lng}`;
+  useEffect(() => {
+    setFlyTo((x) => ({ p: pos, z: source === "gps" ? 16 : 15, n: (x?.n ?? 0) + 1 }));
+  }, [originKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const list = useMemo(() => filterCenters(centers, f, pos), [centers, f, pos]);
   const ordered = useMemo(() => {
@@ -162,9 +172,9 @@ export default function MapScreen() {
   return (
     <div ref={box} className="absolute inset-x-0 top-0 isolate overflow-hidden" style={{ bottom: "var(--tabbar-h)" }}>
       <MapContainer center={[pos.lat, pos.lng]} zoom={14} zoomControl={false} className="absolute inset-0 z-0" style={{ bottom: detents[0] - 24 }}>
-        <TileLayer url={TILE_URL} attribution={TILE_ATTR} maxZoom={19} />
+        <BaseTiles layer={layer} />
         <Markers list={list} selected={selected} onSelect={select} />
-        {userPos && <Marker position={[userPos.lat, userPos.lng]} icon={meIcon} interactive={false} zIndexOffset={2000} />}
+        {userPos && <MeMarker pos={userPos} acc={userAcc} />}
         {source === "address" && <Marker position={[pos.lat, pos.lng]} icon={pinIcon("#13804F", false, false)} title={label} interactive={false} />}
         {f.radius && <Circle center={[pos.lat, pos.lng]} radius={f.radius * 1000} pathOptions={{ color: "#1E6FD9", weight: 1.5, fillOpacity: 0.06 }} />}
         <Controller flyTo={flyTo} sizeKey={`${h}-${tab}`} />
@@ -195,12 +205,18 @@ export default function MapScreen() {
         </div>
       </div>
 
+      {/* Xarita / Sputnik */}
+      <div className="absolute right-3 z-[600]" style={{ top: "calc(60px + var(--safe-top))" }}>
+        <LayerToggle layer={layer} onChange={setLayer} />
+      </div>
+
       {/* Joylashuv tugmasi — sheet ustida suzadi */}
       <button
         aria-label="Mening joylashuvim"
         onClick={async () => {
           const p = await locate(true);
-          if (p) setFlyTo((x) => ({ p, z: 16, n: (x?.n ?? 0) + 1 }));
+          if (p) setFlyTo((x) => ({ p, z: 17, n: (x?.n ?? 0) + 1 }));
+          else openLocationSettings();
         }}
         className="focus-ring pressable absolute right-3 z-[600] flex h-11 w-11 items-center justify-center rounded-full bg-card text-tint shadow-float transition-[bottom] duration-300"
         style={{ bottom: (detent === 2 ? detents[1] : detents[detent]) + 12, opacity: detent === 2 ? 0 : 1 }}

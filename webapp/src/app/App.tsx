@@ -22,6 +22,9 @@ import { AboutPage } from "../screens/profile/AboutPage";
 
 // Xarita (Leaflet) — alohida chunk, faqat Xarita tabida yuklanadi
 const MapScreen = lazy(() => import("../screens/map/MapScreen"));
+// Markazlar uchun ro‘yxatdan o‘tish (bot: /markaz → ?mode=register)
+const RegisterApp = lazy(() => import("../register/RegisterApp"));
+const REGISTER_MODE = new URLSearchParams(location.search).get("mode") === "register";
 
 function renderRoute(r: Route): ReactNode {
   switch (r.name) {
@@ -94,6 +97,21 @@ function useTheme() {
 }
 
 export function App() {
+  return REGISTER_MODE ? <RegisterRoot /> : <MainApp />;
+}
+
+function RegisterRoot() {
+  useTheme();
+  return (
+    <MotionConfig reducedMotion="user">
+      <Suspense fallback={<Loading />}>
+        <RegisterApp />
+      </Suspense>
+    </MotionConfig>
+  );
+}
+
+function MainApp() {
   useTheme();
   const tab = useNav((s) => s.tab);
   const stacks = useNav((s) => s.stacks);

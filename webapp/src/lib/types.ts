@@ -9,6 +9,14 @@ export interface Group {
   freeSeats: number;
 }
 
+export interface Teacher {
+  name: string;
+  subject: string;
+  /** tajriba, yil */
+  experience: number | null;
+  about: string;
+}
+
 export interface Center {
   id: string;
   name: string;
@@ -26,6 +34,7 @@ export interface Center {
   photoUrl: string | null;
   kind: "center" | "tutor";
   groups: Group[];
+  teachers: Teacher[];
   updatedMs: number;
 }
 

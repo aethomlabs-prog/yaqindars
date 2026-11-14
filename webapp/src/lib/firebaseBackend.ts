@@ -59,6 +59,12 @@ function toCenter(id: string, d: DocumentData): Center {
       price: Number(g.price) || 0,
       freeSeats: Number(g.freeSeats) || 0
     })),
+    teachers: (Array.isArray(d.teachers) ? d.teachers : []).slice(0, 12).map((t: DocumentData) => ({
+      name: str(t.name, 60),
+      subject: str(t.subject, 40),
+      experience: num(t.experience),
+      about: str(t.about, 120)
+    })),
     updatedMs: ms(d.updatedAt)
   };
 }

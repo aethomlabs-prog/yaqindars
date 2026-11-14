@@ -43,6 +43,44 @@ export function onThemeChanged(fn: () => void) {
   return () => tg?.offEvent?.("themeChanged", fn);
 }
 
+/* ---------- Joylashuv: Telegram LocationManager (Bot API 8.0+) ---------- */
+export interface Fix {
+  lat: number;
+  lng: number;
+  /** aniqlik, metr */
+  acc: number | null;
+}
+
+/** Telegram’ning o‘z joylashuv API’si. Mavjud bo‘lmasa yoki rad etilsa — null. */
+export function tgLocation(): Promise<Fix | null> {
+  const lm = can("8.0") ? tg.LocationManager : null;
+  if (!lm) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const get = () => {
+      if (!lm.isLocationAvailable) return resolve(null);
+      lm.getLocation((d: { latitude: number; longitude: number; horizontal_accuracy?: number } | null) =>
+        resolve(d ? { lat: d.latitude, lng: d.longitude, acc: d.horizontal_accuracy ?? null } : null)
+      );
+    };
+    try {
+      if (lm.isInited) get();
+      else lm.init(get);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/** Joylashuvga ruxsat rad etilgan bo‘lsa — Telegram sozlamalarini ochish */
+export function openLocationSettings(): boolean {
+  const lm = can("8.0") ? tg.LocationManager : null;
+  if (lm?.isInited && lm.isAccessRequested && !lm.isAccessGranted) {
+    lm.openSettings();
+    return true;
+  }
+  return false;
+}
+
 /* ---------- Haptic ---------- */
 export const haptic = {
   selection: () => can("6.1") && tg.HapticFeedback.selectionChanged(),

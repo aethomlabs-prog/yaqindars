@@ -4,7 +4,7 @@ import type { Center, Chat, Message, Review } from "../lib/types";
 const DAY = 86400000;
 const now = Date.now();
 
-type Raw = Omit<Center, "reviewsCount" | "photoUrl" | "kind" | "updatedMs" | "description" | "ageFrom" | "ageTo"> &
+type Raw = Omit<Center, "reviewsCount" | "photoUrl" | "kind" | "updatedMs" | "description" | "ageFrom" | "ageTo" | "teachers"> &
   Partial<Center> & { age?: number };
 
 function c(x: Raw & { daysOld: number }): Center {
@@ -15,12 +15,13 @@ function c(x: Raw & { daysOld: number }): Center {
     description: "",
     ageFrom: null,
     ageTo: null,
+    teachers: [],
     ...x,
     updatedMs: now - x.daysOld * DAY
   };
 }
 
-export const DEMO_CENTERS: Center[] = [
+const BASE_CENTERS: Center[] = [
   c({
     id: "demo1", name: "Namuna: Bilimdon markazi", address: "Rishton, Mustaqillik ko‘chasi 12", lat: 40.3592, lng: 71.2861,
     phone: "+998900000001", vip: true, rating: 4.8, reviewsCount: 36, daysOld: 1, ageFrom: 7, ageTo: 17,
@@ -131,6 +132,68 @@ export const DEMO_CENTERS: Center[] = [
     groups: [{ subject: "Ona tili", days: ["Se", "Pa", "Sh"], time: "10:00–11:00", price: 200000, freeSeats: 3 }]
   })
 ];
+
+
+/* O‘qituvchilar (namuna) */
+const t = (name: string, subject: string, experience: number, about: string) => ({ name, subject, experience, about });
+const TEACHERS: Record<string, Center["teachers"]> = {
+  demo1: [
+    t("Namuna: Nilufar Rahimova", "Ingliz tili", 8, "IELTS 8.0, CELTA sertifikati"),
+    t("Namuna: Bekzod Tursunov", "Matematika", 6, "Olimpiada g‘oliblarini tayyorlagan")
+  ],
+  demo2: [
+    t("Namuna: Sherzod Aliyev", "IT", 5, "Python dasturchi, 3 yil kompaniyada ishlagan"),
+    t("Namuna: Madina Qodirova", "IT", 3, "Veb-dizayn va Scratch")
+  ],
+  demo3: [t("Namuna: Zulfiya Ergasheva", "Kimyo", 12, "Oliy toifali o‘qituvchi"), t("Namuna: Rustam Xolmatov", "Biologiya", 9, "Tibbiyot institutiga tayyorlov")],
+  demo4: [t("Namuna: Svetlana Ivanova", "Rus tili", 15, "Rus tili va adabiyoti o‘qituvchisi")],
+  demo5: [t("Namuna: Anvar Mirzayev", "Sport", 10, "Sobiq professional futbolchi")],
+  demo6: [t("Namuna: Akmal Yusupov", "Matematika", 14, "Respublika olimpiadasi hakami"), t("Namuna: Dilshod Karimov", "Fizika", 7, "DTM testlari bo‘yicha mutaxassis")],
+  demo7: [t("Namuna: Gulnora Saidova", "Ingliz tili", 6, "Bolalar bilan ishlash bo‘yicha sertifikat"), t("Namuna: Feruza Nazarova", "Matematika", 4, "Montessori metodikasi")],
+  demo8: [t("Namuna: Olim Hakimov", "Shaxmat", 20, "FIDE reytingi 2150, xalqaro usta nomzodi")],
+  demo9: [t("Namuna: Javohir Ismoilov", "Sport", 8, "Suzish bo‘yicha sport ustasi"), t("Namuna: Kamola Ahmedova", "Sport", 5, "Bolalar suzish murabbiyi")],
+  demo10: [t("Namuna: Mohira Abdullayeva", "Ona tili", 11, "Boshlang‘ich sinf o‘qituvchisi")]
+};
+
+/* O‘qituvchilar jamoasi bilan ikki qo‘shimcha namuna markaz */
+const EXTRA_CENTERS: Center[] = [
+  c({
+    id: "demo11", name: "Namuna: Ziyo Academy", address: "Rishton, Mustaqillik ko‘chasi 40", lat: 40.3602, lng: 71.2897,
+    phone: "+998900000014", vip: true, rating: 4.9, reviewsCount: 52, daysOld: 0, ageFrom: 8, ageTo: 18,
+    amenities: ["Wi-Fi", "Konditsioner", "Kutubxona", "Ota-onalar uchun kutish zali"],
+    description: "Ingliz tili, matematika va IT bir joyda. Har oy bepul sinov testi va ota-onalar bilan uchrashuv.",
+    groups: [
+      { subject: "Ingliz tili", days: ["Du", "Ch", "Ju"], time: "14:00–15:30", price: 320000, freeSeats: 4 },
+      { subject: "Ingliz tili", days: ["Se", "Pa", "Sh"], time: "16:00–17:30", price: 320000, freeSeats: 0 },
+      { subject: "Matematika", days: ["Du", "Ch"], time: "16:00–17:30", price: 280000, freeSeats: 2 },
+      { subject: "IT", days: ["Sh", "Ya"], time: "10:00–12:00", price: 380000, freeSeats: 5 }
+    ],
+    teachers: [
+      t("Namuna: Laylo Umarova", "Ingliz tili", 9, "IELTS 8.5, 120+ o‘quvchi 7.0 dan yuqori olgan"),
+      t("Namuna: Timur Rashidov", "Ingliz tili", 4, "Speaking klubi rahbari"),
+      t("Namuna: Botir Qosimov", "Matematika", 11, "Prezident maktabiga tayyorlov"),
+      t("Namuna: Aziza Mamatova", "IT", 5, "Frontend dasturchi, Google sertifikati")
+    ]
+  }),
+  c({
+    id: "demo12", name: "Namuna: Til markazi «Polyglot»", address: "Rishton, Yangiobod ko‘chasi 7", lat: 40.3528, lng: 71.2953,
+    phone: "+998900000015", vip: false, rating: 4.6, reviewsCount: 19, daysOld: 4, ageFrom: 10, ageTo: 18,
+    amenities: ["Wi-Fi", "Interaktiv doska"],
+    description: "Ingliz, rus va koreys tillari. Kichik guruhlar, bepul speaking klub.",
+    groups: [
+      { subject: "Ingliz tili", days: ["Se", "Pa", "Sh"], time: "15:00–16:30", price: 260000, freeSeats: 3 },
+      { subject: "Rus tili", days: ["Du", "Ch"], time: "17:00–18:00", price: 200000, freeSeats: 6 },
+      { subject: "Koreys tili", days: ["Ju", "Sh"], time: "11:00–12:30", price: 300000, freeSeats: 2 }
+    ],
+    teachers: [
+      t("Namuna: Shahnoza Yo‘ldosheva", "Ingliz tili", 7, "Cambridge CELTA"),
+      t("Namuna: Elena Petrova", "Rus tili", 18, "Ona tili — rus tili"),
+      t("Namuna: Kim Soo-jin", "Koreys tili", 3, "TOPIK 6, Seuldan")
+    ]
+  })
+];
+
+export const DEMO_CENTERS: Center[] = [...BASE_CENTERS.map((x) => ({ ...x, teachers: TEACHERS[x.id] ?? x.teachers })), ...EXTRA_CENTERS];
 
 export const DEMO_REVIEWS: Review[] = [
   { id: "r1", author: "Nodira", rating: 5, text: "O‘g‘lim 3 oyda ancha o‘sdi, ustozlar juda e’tiborli.", createdMs: now - 4 * DAY },

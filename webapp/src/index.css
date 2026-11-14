@@ -217,3 +217,8 @@ select {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Sputnik suratlari qorong‘i mavzuda ham asl rangda */
+[data-theme="dark"] .leaflet-tile-pane:has(.yd-sat) {
+  filter: none;
+}

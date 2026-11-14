@@ -12,6 +12,7 @@ import os
 import sys
 from datetime import datetime, timedelta, timezone
 from html import escape
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 
@@ -37,6 +38,16 @@ if not WEBAPP_URL.startswith("https://"):
 if not os.path.isfile(CRED_PATH):
     sys.exit(f"XATO: Firebase service account fayli topilmadi: {CRED_PATH}")
 
+def _with_param(url: str, key: str, value: str) -> str:
+    parts = urlsplit(url)
+    q = dict(parse_qsl(parts.query))
+    q[key] = value
+    return urlunsplit(parts._replace(query=urlencode(q)))
+
+
+# Markazni ro'yxatdan o'tkazish Mini App'i (o'sha web app, ?mode=register)
+REGISTER_URL = _with_param(WEBAPP_URL, "mode", "register")
+
 import firebase_admin  # noqa: E402
 from aiogram import Bot, Dispatcher, F, Router  # noqa: E402
 from aiogram.client.default import DefaultBotProperties  # noqa: E402
@@ -60,7 +71,15 @@ from aiogram.types import (  # noqa: E402
 from firebase_admin import credentials, firestore  # noqa: E402
 from google.cloud.firestore_v1.base_query import FieldFilter  # noqa: E402
 
-from parsers import normalize_phone, parse_days, parse_int, parse_time  # noqa: E402
+from parsers import (  # noqa: E402
+    TARIFF_PRICES,
+    RegError,
+    normalize_phone,
+    parse_days,
+    parse_int,
+    parse_registration,
+    parse_time,
+)
 
 firebase_admin.initialize_app(credentials.Certificate(CRED_PATH))
 db = firestore.client()
@@ -154,7 +173,13 @@ def panel(cid: str, data: dict):
     groups = data.get("groups") or []
     status = "✅ Tasdiqlangan — xaritada ko‘rinadi" if data.get("approved") else "⏳ Admin tasdiqlashini kutmoqda"
     vip = " · ⭐ VIP" if data.get("vip") else ""
-    lines = [f"🏫 <b>{escape(data.get('name', ''))}</b>{vip}", f"Holat: {status}", ""]
+    tariff = data.get("tariff")
+    lines = [f"🏫 <b>{escape(data.get('name', ''))}</b>{vip}", f"Holat: {status}"]
+    if tariff in TARIFF_PRICES:
+        lines.append(f"Tarif: {'VIP' if tariff == 'vip' else 'Oddiy'} — {fmt_sum(TARIFF_PRICES[tariff])}/oy")
+    if data.get("teachers"):
+        lines.append(f"O‘qituvchilar: {len(data['teachers'])} ta")
+    lines.append("")
     if not groups:
         lines.append("Hali guruh qo‘shilmagan. «➕ Guruh qo‘shish» tugmasini bosing.")
     for i, g in enumerate(groups, 1):
@@ -263,23 +288,129 @@ async def my_id(message: Message):
     await message.answer(f"Sizning Telegram ID: <code>{message.from_user.id}</code>")
 
 
+def register_keyboard(text: str = "📝 Markazni qo‘shish") -> ReplyKeyboardMarkup:
+    """Mini App faqat REPLY-klaviatura tugmasidan ochilganda sendData() ishlaydi."""
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=text, web_app=WebAppInfo(url=REGISTER_URL))]],
+        resize_keyboard=True,
+        input_field_placeholder="Pastdagi tugmani bosing",
+    )
+
+
+TARIFF_TEXT = (
+    "💼 <b>Tariflar</b> (birinchi oy — bepul):\n"
+    f"• <b>Oddiy</b> — {fmt_sum(TARIFF_PRICES['oddiy'])}/oy: xaritada ko‘rinish, arizalar botga keladi\n"
+    f"• <b>VIP</b> — {fmt_sum(TARIFF_PRICES['vip'])}/oy: ro‘yxatda birinchi, xaritada oltin belgi, «Tavsiya etilgan» bo‘limida"
+)
+
+
 @router.message(Command("markaz"))
 async def markaz(message: Message, state: FSMContext):
     await state.clear()
+    if message.chat.type != "private":
+        return await message.answer("Markaz paneli faqat bot bilan shaxsiy chatda ishlaydi.")
     docs = await owner_centers(message.from_user.id)
     if not docs:
-        kb = InlineKeyboardMarkup(inline_keyboard=[[btn("📝 Markazni ro‘yxatdan o‘tkazish", "reg")]])
         await message.answer(
-            "Sizda hali ro‘yxatdan o‘tgan markaz yo‘q.\n"
-            "Ro‘yxatdan o‘ting — birinchi oy bepul.\n\n"
-            "Tariflar: Oddiy — 75 000 so‘m/oy, VIP — 150 000 so‘m/oy "
-            "(VIP markaz xaritada oltin belgi bilan va ro‘yxatda birinchi chiqadi).",
-            reply_markup=kb,
+            "🏫 <b>Markazingizni YaqinDars’ga qo‘shing</b>\n\n"
+            f"{TARIFF_TEXT}\n\n"
+            "Pastdagi <b>«📝 Markazni qo‘shish»</b> tugmasini bosing: tarif, ma’lumot, xaritadagi joy, "
+            "guruhlar va o‘qituvchilarni 3–5 daqiqada kiritasiz.",
+            reply_markup=register_keyboard(),
         )
+        kb = InlineKeyboardMarkup(inline_keyboard=[[btn("💬 Matn orqali ro‘yxatdan o‘tish", "reg")]])
+        await message.answer("Tugma ko‘rinmayaptimi? Telegram’ni yangilang yoki matn orqali o‘ting:", reply_markup=kb)
         return
     for d in docs:
         text, kb = panel(d.id, as_dict(d))
         await message.answer(text, reply_markup=kb)
+    await message.answer(
+        "Yana markaz yoki filial qo‘shish uchun pastdagi tugmani bosing.",
+        reply_markup=register_keyboard("➕ Yangi markaz qo‘shish"),
+    )
+
+
+@router.message(F.web_app_data)
+async def on_register_app(message: Message, state: FSMContext, bot: Bot):
+    """Ro'yxatdan o'tish Mini App'idan kelgan ma'lumot.
+    Telegram jo'natuvchini kafolatlaydi, mazmunini esa parse_registration tekshiradi."""
+    await state.clear()
+    try:
+        data = parse_registration(message.web_app_data.data)
+    except RegError as e:
+        return await message.answer(
+            f"⚠️ Ma’lumotda xato: {escape(str(e))}.\nTugmani qayta bosing — kiritganlaringiz saqlangan.",
+            reply_markup=register_keyboard(),
+        )
+    user = message.from_user
+    existing = [as_dict(c) for c in await owner_centers(user.id)]
+    if len(existing) >= 5:
+        return await message.answer(
+            "Bitta akkauntga 5 tadan ortiq markaz qo‘shib bo‘lmaydi. Admin bilan bog‘laning.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+    if any(c.get("name") == data["name"] and not c.get("approved") for c in existing):
+        return await message.answer(
+            "Bu markaz allaqachon yuborilgan va admin tekshiruvida. Panel: /markaz",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+    doc = {
+        **data,
+        "vip": False,  # VIP tarif admin tasdiqlaganda yoqiladi
+        "rating": None,
+        "approved": False,
+        "ownerTgId": user.id,
+        "ownerUsername": user.username,
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+        "lastReminderAt": None,
+    }
+    _, ref = await asyncio.to_thread(CENTERS.add, doc)
+    tariff_name = "VIP" if data["tariff"] == "vip" else "Oddiy"
+    await message.answer(
+        f"✅ <b>{escape(data['name'])}</b> qabul qilindi!\n"
+        f"Tarif: {tariff_name} — birinchi oy bepul.\n\n"
+        "Admin tekshirgach (odatda 1 kun ichida) markazingiz xaritada ko‘rinadi. "
+        "Bo‘sh joylar va narxlarni quyidagi panelda boshqarasiz:",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    await send_panel(message, ref.id)
+    await notify_admins_new_center(bot, ref.id, doc, user)
+
+
+async def notify_admins_new_center(bot: Bot, cid: str, data: dict, user):
+    if not ADMIN_IDS:
+        log.warning("ADMIN_IDS bo‘sh — yangi markazni tasdiqlaydigan admin yo‘q")
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[[btn("✅ Tasdiqlash", "ap", cid), btn("❌ Rad etish", "rj", cid)]])
+    who = f"@{user.username}" if user.username else f"{user.full_name} ({user.id})"
+    tariff = data.get("tariff")
+    lines = [
+        f"🆕 Yangi {'repetitor' if data.get('kind') == 'tutor' else 'markaz'}: <b>{escape(data['name'])}</b>",
+        f"💼 Tarif: <b>{'VIP' if tariff == 'vip' else 'Oddiy'}</b>" if tariff else "💼 Tarif: tanlanmagan (matn orqali)",
+        f"📍 {escape(data['address'])}",
+        f"📞 {escape(data['phone'])}",
+        f"🏷 Sharoitlar: {escape(', '.join(data.get('amenities') or []) or '—')}",
+    ]
+    for g in data.get("groups") or []:
+        lines.append(
+            f"📚 {escape(g['subject'])} · {escape(', '.join(g['days']))} · {escape(g['time'])} · "
+            f"{fmt_sum(g['price'])} · {g['freeSeats']} joy"
+        )
+    for t in data.get("teachers") or []:
+        exp = f", {t['experience']} yil" if t.get("experience") else ""
+        lines.append(f"👩‍🏫 {escape(t['name'])} — {escape(t['subject'])}{exp}")
+    if data.get("description"):
+        lines.append(f"📝 {escape(data['description'])}")
+    lines += [f"👤 {escape(who)}", f"ID: <code>{cid}</code>"]
+    text = "\n".join(lines)[:4000]
+    for admin in ADMIN_IDS:
+        try:
+            await bot.send_message(admin, text, reply_markup=kb)
+            await bot.send_location(admin, data["lat"], data["lng"])
+        except Exception as e:  # noqa: BLE001
+            log.warning("Admin %s ga yuborilmadi: %s", admin, e)
 
 
 @router.message(Command("vip"))
@@ -518,23 +649,7 @@ async def reg_finish(message: Message, state: FSMContext, bot: Bot):
     )
     await send_panel(message, ref.id)
 
-    if not ADMIN_IDS:
-        log.warning("ADMIN_IDS bo‘sh — yangi markazni tasdiqlaydigan admin yo‘q")
-    kb = InlineKeyboardMarkup(inline_keyboard=[[btn("✅ Tasdiqlash", "ap", ref.id), btn("❌ Rad etish", "rj", ref.id)]])
-    who = f"@{user.username}" if user.username else f"{user.full_name} ({user.id})"
-    amen = ", ".join(amenities) or "—"
-    for admin in ADMIN_IDS:
-        try:
-            await bot.send_message(
-                admin,
-                f"🆕 Yangi markaz: <b>{escape(data['name'])}</b>\n"
-                f"📍 {escape(data['address'])}\n📞 {escape(data['phone'])}\n"
-                f"🏷 Sharoitlar: {escape(amen)}\n👤 {escape(who)}\nID: <code>{ref.id}</code>",
-                reply_markup=kb,
-            )
-            await bot.send_location(admin, data["lat"], data["lng"])
-        except Exception as e:  # noqa: BLE001
-            log.warning("Admin %s ga yuborilmadi: %s", admin, e)
+    await notify_admins_new_center(bot, ref.id, doc, user)
 
 
 # ---------------- Add group ----------------
@@ -650,10 +765,12 @@ async def admin_decide(call: CallbackQuery, bot: Bot):
         return await call.answer("Markaz topilmadi (ehtimol, allaqachon rad etilgan).", show_alert=True)
     owner = as_dict(snap).get("ownerTgId")
     if action == "ap":
-        await asyncio.to_thread(
-            CENTERS.document(cid).update, {"approved": True, "updatedAt": firestore.SERVER_TIMESTAMP}
-        )
-        mark = "✅ Tasdiqlandi"
+        vip_on = as_dict(snap).get("tariff") == "vip"
+        upd = {"approved": True, "updatedAt": firestore.SERVER_TIMESTAMP}
+        if vip_on:
+            upd["vip"] = True  # VIP tarif: birinchi oy bepul
+        await asyncio.to_thread(CENTERS.document(cid).update, upd)
+        mark = "✅ Tasdiqlandi" + (" (⭐ VIP)" if vip_on else "")
         msg = "🎉 Markazingiz tasdiqlandi va xaritada ko‘rinmoqda!\nGuruhlar va bo‘sh joylarni boshqarish: /markaz"
     else:
         await asyncio.to_thread(CENTERS.document(cid).delete)
@@ -793,7 +910,7 @@ async def main():
     await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Xarita", web_app=WebAppInfo(url=WEBAPP_URL)))
     await bot.set_my_commands([
         BotCommand(command="start", description="Xaritani ochish"),
-        BotCommand(command="markaz", description="Markaz paneli"),
+        BotCommand(command="markaz", description="Markazni qo‘shish / boshqarish"),
         BotCommand(command="help", description="Yordam"),
         BotCommand(command="cancel", description="Bekor qilish"),
     ])

@@ -1,4 +1,7 @@
+import { tgLocation, type Fix } from "./telegram";
 import type { LatLng } from "./types";
+
+export type { Fix };
 
 export const RISHTON: LatLng = { lat: 40.3567, lng: 71.2847 };
 
@@ -17,15 +20,37 @@ export function formatDistance(km: number): string {
   return `${km.toFixed(1).replace(".", ",")} km`;
 }
 
-export function getCurrentPosition(timeout = 10000): Promise<LatLng> {
+const fromBrowser = (p: GeolocationPosition): Fix => ({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy ?? null });
+
+function browserFix(timeout: number): Promise<Fix> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error("unsupported"));
-    navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      reject,
-      { enableHighAccuracy: true, timeout, maximumAge: 60000 }
-    );
+    navigator.geolocation.getCurrentPosition((p) => resolve(fromBrowser(p)), reject, { enableHighAccuracy: true, timeout, maximumAge: 15000 });
   });
+}
+
+/** Aniq joylashuv: brauzer GPS (yuqori aniqlik), u ishlamasa — Telegram LocationManager. */
+export async function getCurrentPosition(timeout = 12000): Promise<Fix> {
+  try {
+    return await browserFix(timeout);
+  } catch (e) {
+    const t = await tgLocation();
+    if (t) return t;
+    throw e;
+  }
+}
+
+/** Joylashuvni doimiy kuzatish (xarita ochiq paytida). Qaytaradi: to‘xtatish funksiyasi. */
+export function watchPosition(onFix: (f: Fix) => void, onDenied?: () => void): () => void {
+  if (!navigator.geolocation) return () => {};
+  const id = navigator.geolocation.watchPosition(
+    (p) => onFix(fromBrowser(p)),
+    (e) => {
+      if (e.code === e.PERMISSION_DENIED) onDenied?.();
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+  );
+  return () => navigator.geolocation.clearWatch(id);
 }
 
 export function routeUrl(to: LatLng, from?: LatLng | null): string {

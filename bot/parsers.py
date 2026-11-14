@@ -73,3 +73,120 @@ def normalize_phone(raw: str):
         digits = "998" + digits
     phone = "+" + digits
     return phone if re.fullmatch(r"\+998\d{9}", phone) else None
+
+
+# ---------------- Mini App: markazni ro'yxatdan o'tkazish ----------------
+import json  # noqa: E402
+
+TARIFF_PRICES = {"oddiy": 75_000, "vip": 145_000}
+_TIME_RE = re.compile(r"(\d{2}):(\d{2})–(\d{2}):(\d{2})")
+
+
+class RegError(ValueError):
+    """Foydalanuvchiga ko'rsatiladigan xato matni bilan."""
+
+
+def _s(v, lo: int, hi: int, what: str, required: bool = True) -> str:
+    if v is None or v == "":
+        if required:
+            raise RegError(f"{what} ko‘rsatilmagan")
+        return ""
+    if not isinstance(v, str):
+        raise RegError(f"{what} noto‘g‘ri")
+    v = " ".join(v.split())  # ortiqcha bo'shliq va yangi qatorlar
+    if not lo <= len(v) <= hi:
+        raise RegError(f"{what} {lo}–{hi} belgi bo‘lsin")
+    return v
+
+
+def _int(v, lo: int, hi: int, what: str, allow_none: bool = False):
+    if v is None and allow_none:
+        return None
+    if isinstance(v, bool) or not isinstance(v, int) or not lo <= v <= hi:
+        raise RegError(f"{what} noto‘g‘ri")
+    return v
+
+
+def parse_registration(raw: str) -> dict:
+    """Mini App sendData JSON -> Firestore hujjati uchun toza dict. Xato bo'lsa RegError."""
+    if not raw or len(raw.encode()) > 4096:
+        raise RegError("Ma’lumot juda katta yoki bo‘sh")
+    try:
+        d = json.loads(raw)
+    except ValueError:
+        raise RegError("Ma’lumotni o‘qib bo‘lmadi") from None
+    if not isinstance(d, dict) or d.get("v") != 1:
+        raise RegError("Ilova versiyasi eskirgan — Mini App’ni qayta oching")
+
+    tariff = d.get("t")
+    if tariff not in TARIFF_PRICES:
+        raise RegError("Tarif tanlanmagan")
+    kind = d.get("k") if d.get("k") in ("center", "tutor") else "center"
+
+    phone = normalize_phone(d.get("p") if isinstance(d.get("p"), str) else "")
+    if not phone:
+        raise RegError("Telefon raqam noto‘g‘ri")
+
+    lat, lng = d.get("la"), d.get("lo")
+    if not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in (lat, lng)):
+        raise RegError("Joylashuv ko‘rsatilmagan")
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        raise RegError("Joylashuv noto‘g‘ri")
+
+    age_from = _int(d.get("af"), 2, 60, "Yosh", allow_none=True)
+    age_to = _int(d.get("at"), 2, 60, "Yosh", allow_none=True)
+    if age_from and age_to and age_from > age_to:
+        age_from, age_to = age_to, age_from
+
+    amenities = d.get("am") or []
+    if not isinstance(amenities, list):
+        raise RegError("Sharoitlar noto‘g‘ri")
+    amenities = [_s(a, 1, 30, "Sharoit") for a in amenities[:8]]
+
+    raw_groups = d.get("g")
+    if not isinstance(raw_groups, list) or not 1 <= len(raw_groups) <= 10:
+        raise RegError("Kamida 1 ta, ko‘pi bilan 10 ta guruh bo‘lsin")
+    groups = []
+    for g in raw_groups:
+        if not isinstance(g, list) or len(g) != 5:
+            raise RegError("Guruh ma’lumoti noto‘g‘ri")
+        subject = _s(g[0], 2, 40, "Fan")
+        days = parse_days(g[1]) if isinstance(g[1], str) else None
+        if not days:
+            raise RegError(f"«{subject}»: dars kunlari noto‘g‘ri")
+        time = parse_time(g[2].replace("–", "-")) if isinstance(g[2], str) else None
+        if not time:
+            raise RegError(f"«{subject}»: vaqt noto‘g‘ri")
+        price = _int(g[3], 10_000, 10_000_000, f"«{subject}» narxi")
+        seats = _int(g[4], 0, 100, f"«{subject}» bo‘sh joylari")
+        groups.append({"subject": subject, "days": days, "time": time, "price": price, "freeSeats": seats})
+
+    raw_teachers = d.get("tc") or []
+    if not isinstance(raw_teachers, list) or len(raw_teachers) > 10:
+        raise RegError("O‘qituvchilar ro‘yxati noto‘g‘ri")
+    teachers = []
+    for t in raw_teachers:
+        if not isinstance(t, list) or len(t) != 4:
+            raise RegError("O‘qituvchi ma’lumoti noto‘g‘ri")
+        teachers.append({
+            "name": _s(t[0], 3, 60, "O‘qituvchi ismi"),
+            "subject": _s(t[1], 2, 40, "O‘qituvchi fani"),
+            "experience": _int(t[2], 0, 60, "Tajriba", allow_none=True),
+            "about": _s(t[3], 0, 120, "Izoh", required=False),
+        })
+
+    return {
+        "tariff": tariff,
+        "kind": kind,
+        "name": _s(d.get("n"), 2, 80, "Nomi"),
+        "phone": phone,
+        "address": _s(d.get("a"), 3, 150, "Manzil"),
+        "lat": float(lat),
+        "lng": float(lng),
+        "description": _s(d.get("d"), 0, 500, "Tavsif", required=False),
+        "ageFrom": age_from,
+        "ageTo": age_to,
+        "amenities": amenities,
+        "groups": groups,
+        "teachers": teachers,
+    }
