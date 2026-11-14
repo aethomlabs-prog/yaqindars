@@ -8,16 +8,12 @@ import { PIN_PATH } from "../../components/brand";
 import { Spinner } from "../../components/ios/Spinner";
 import type { LatLng } from "../../lib/types";
 import { useApp } from "../../store/app";
-import { BaseTiles, LayerToggle, MeMarker, useBaseLayer } from "./layers";
+import { BaseTiles, LayerToggle, MeMarker, useBaseLayer, useMapAutoSize } from "./layers";
 
 
 function Tracker({ onMove, onDrag, onUserMove, follow }: { onMove: (p: LatLng) => void; onDrag: (d: boolean) => void; onUserMove?: () => void; follow?: LatLng | null }) {
   const map = useMap();
-  useEffect(() => {
-    // Sheet animatsiyasidan keyin o‘lchamni qayta hisoblash
-    const t = setTimeout(() => map.invalidateSize(), 350);
-    return () => clearTimeout(t);
-  }, [map]);
+  useMapAutoSize(); // sheet animatsiyasi, Telegram viewport o‘zgarishlari
   // Foydalanuvchi hali pinni surmagan bo‘lsa — GPS topilganda o‘sha joyga uchamiz
   useEffect(() => {
     if (follow) map.flyTo([follow.lat, follow.lng], 17, { duration: 0.6 });

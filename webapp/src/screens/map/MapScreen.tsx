@@ -12,12 +12,12 @@ import { Chip, EmptyState } from "../../components/ios/controls";
 import { DetentSheet } from "../../components/ios/Sheet";
 import { Spinner } from "../../components/ios/Spinner";
 import { SUBJECTS } from "../../lib/match";
-import { haptic, onThemeChanged, openLocationSettings } from "../../lib/telegram";
+import { haptic, openLocationSettings } from "../../lib/telegram";
 import type { LatLng } from "../../lib/types";
 import { useApp, useOrigin } from "../../store/app";
 import { activeFilterCount, filterCenters, useFilters, type Visible } from "../../store/filters";
 import { useNav } from "../../store/nav";
-import { BaseTiles, LayerToggle, MeMarker, useBaseLayer } from "./layers";
+import { BaseTiles, LayerToggle, MeMarker, useBaseLayer, useMapAutoSize } from "./layers";
 import { FilterSheet } from "./FilterSheet";
 
 /* ---------- Marker ikonkalari ---------- */
@@ -91,19 +91,7 @@ function Controller({ flyTo, sizeKey }: { flyTo: { p: LatLng; z?: number; n: num
   useEffect(() => {
     if (flyTo) map.flyTo([flyTo.p.lat, flyTo.p.lng], flyTo.z ?? Math.max(map.getZoom(), 15), { duration: 0.6 });
   }, [flyTo, map]);
-  useEffect(() => {
-    const t = setTimeout(() => map.invalidateSize(), 50);
-    return () => clearTimeout(t);
-  }, [sizeKey, map]);
-  useEffect(() => {
-    const on = () => map.invalidateSize();
-    window.addEventListener("resize", on);
-    const off = onThemeChanged(on);
-    return () => {
-      window.removeEventListener("resize", on);
-      off();
-    };
-  }, [map]);
+  useMapAutoSize(sizeKey);
   return null;
 }
 
@@ -117,6 +105,7 @@ export default function MapScreen() {
   const watchLocation = useApp((s) => s.watchLocation);
   const [layer, setLayer] = useBaseLayer();
   const locating = useApp((s) => s.locating);
+  const locStatus = useApp((s) => s.locStatus);
   const tab = useNav((s) => s.tab);
   const push = useNav((s) => s.push);
   const f = useFilters();
@@ -205,8 +194,24 @@ export default function MapScreen() {
         </div>
       </div>
 
+      {/* Joylashuvga ruxsat yo‘q — xarita Rishton’da, yuqorida aniq tugma */}
+      {locStatus === "denied" && !userPos && source !== "address" && (
+        <div className="absolute inset-x-3 z-[600] flex justify-center" style={{ top: "calc(60px + var(--safe-top))" }}>
+          <button
+            onClick={async () => {
+              const p = await locate(true);
+              if (p) setFlyTo((x) => ({ p, z: 17, n: (x?.n ?? 0) + 1 }));
+              else openLocationSettings();
+            }}
+            className="focus-ring pressable flex h-11 items-center gap-2 rounded-full bg-tint px-4 text-subhead font-semibold text-white shadow-float"
+          >
+            {locating ? <Spinner size={18} /> : <LocateFixed size={18} aria-hidden />} Joylashuvni yoqish
+          </button>
+        </div>
+      )}
+
       {/* Xarita / Sputnik */}
-      <div className="absolute right-3 z-[600]" style={{ top: "calc(60px + var(--safe-top))" }}>
+      <div className="absolute right-3 z-[600]" style={{ top: locStatus === "denied" && !userPos && source !== "address" ? "calc(112px + var(--safe-top))" : "calc(60px + var(--safe-top))" }}>
         <LayerToggle layer={layer} onChange={setLayer} />
       </div>
 

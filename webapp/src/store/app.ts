@@ -164,6 +164,8 @@ interface AppState {
   userPos: LatLng | null;
   /** joylashuv aniqligi, metr */
   userAcc: number | null;
+  /** joylashuv holati: denied — ruxsat yo‘q yoki aniqlab bo‘lmadi (xarita Rishton’da ochiladi) */
+  locStatus: "unknown" | "ok" | "denied";
   locating: boolean;
   chats: Chat[];
   apps: Application[];
@@ -189,6 +191,7 @@ export const useApp = create<AppState>((set, get) => ({
   centersStatus: "idle",
   userPos: null,
   userAcc: null,
+  locStatus: "unknown",
   locating: false,
   chats: [],
   apps: [],
@@ -247,11 +250,11 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       const f = await getCurrentPosition();
       const p = { lat: f.lat, lng: f.lng };
-      set({ userPos: p, userAcc: f.acc, locating: false });
+      set({ userPos: p, userAcc: f.acc, locating: false, locStatus: "ok" });
       if (explicit) useProfile.getState().setActiveAddress(null);
       return p;
     } catch {
-      set({ locating: false });
+      set({ locating: false, locStatus: get().userPos ? "ok" : "denied" });
       if (explicit) get().showToast("Joylashuvni aniqlab bo‘lmadi. Telefon sozlamalarida ruxsat bering.", "error");
       return null;
     }
@@ -262,7 +265,9 @@ export const useApp = create<AppState>((set, get) => ({
       const prev = get().userPos;
       // 3 m dan kam siljish — qayta chizmaymiz
       if (prev && Math.abs(prev.lat - f.lat) < 3e-5 && Math.abs(prev.lng - f.lng) < 3e-5 && get().userAcc === f.acc) return;
-      set({ userPos: { lat: f.lat, lng: f.lng }, userAcc: f.acc });
+      set({ userPos: { lat: f.lat, lng: f.lng }, userAcc: f.acc, locStatus: "ok" });
+    }, () => {
+      if (!get().userPos) set({ locStatus: "denied" });
     }),
 
   showToast: (text, kind = "info") => {

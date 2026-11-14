@@ -45,6 +45,12 @@ export function onThemeChanged(fn: () => void) {
   return () => tg?.offEvent?.("themeChanged", fn);
 }
 
+/** Telegram oyna o‘lchami o‘zgarganda (expand, klaviatura, aylantirish) */
+export function onViewportChanged(fn: () => void) {
+  tg?.onEvent?.("viewportChanged", fn);
+  return () => tg?.offEvent?.("viewportChanged", fn);
+}
+
 /* ---------- Joylashuv: Telegram LocationManager (Bot API 8.0+) ---------- */
 export interface Fix {
   lat: number;

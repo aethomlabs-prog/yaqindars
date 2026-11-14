@@ -1,10 +1,41 @@
-/* Xarita asosi: standart — Sputnik gibrid (haqiqiy surat + yo‘llar + nomlar), yoki oddiy xarita. Tanlov eslab qolinadi. */
+/* Xarita asosi: standart — oddiy xarita; Sputnik (haqiqiy surat + yo‘llar + nomlar) ixtiyoriy. Tanlov eslab qolinadi. */
 import { Layers } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Circle, Marker, TileLayer } from "react-leaflet";
+import { Circle, Marker, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
-import { haptic } from "../../lib/telegram";
+import { haptic, onViewportChanged } from "../../lib/telegram";
 import type { LatLng } from "../../lib/types";
+
+/**
+ * Telegram ichida xarita konteyneri o‘lchami ko‘p o‘zgaradi (expand, viewportChanged, yashirin tab, sheet animatsiyasi).
+ * Leaflet buni o‘zi sezmaydi — kulrang/siljigan plitkalar chiqadi. Har o‘zgarishda invalidateSize() chaqiramiz.
+ */
+export function useMapAutoSize(trigger?: unknown) {
+  const map = useMap();
+  useEffect(() => {
+    const fix = () => map.invalidateSize({ pan: false });
+    const el = map.getContainer();
+    const ro = new ResizeObserver(fix);
+    ro.observe(el);
+    const offTg = onViewportChanged(fix);
+    window.addEventListener("resize", fix);
+    window.addEventListener("orientationchange", fix);
+    // tg.expand() va animatsiyalar tugashini kutib yana bir necha marta
+    const timers = [60, 300, 800, 1500].map((ms) => setTimeout(fix, ms));
+    return () => {
+      ro.disconnect();
+      offTg();
+      window.removeEventListener("resize", fix);
+      window.removeEventListener("orientationchange", fix);
+      timers.forEach(clearTimeout);
+    };
+  }, [map]);
+  // Tab ko‘rinadigan bo‘lganda va boshqa tashqi signallarda
+  useEffect(() => {
+    const t = setTimeout(() => map.invalidateSize({ pan: false }), 50);
+    return () => clearTimeout(t);
+  }, [map, trigger]);
+}
 
 export type BaseLayer = "map" | "sat";
 const KEY = "yd-map-layer";
@@ -12,9 +43,9 @@ const listeners = new Set<(l: BaseLayer) => void>();
 
 function read(): BaseLayer {
   try {
-    return localStorage.getItem(KEY) === "map" ? "map" : "sat";
+    return localStorage.getItem(KEY) === "sat" ? "sat" : "map";
   } catch {
-    return "sat";
+    return "map";
   }
 }
 
