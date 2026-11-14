@@ -12,7 +12,7 @@ import { fmtDate, fmtSum, isStale, updatedText } from "../../lib/format";
 import { distanceKm, formatDistance, routeUrl } from "../../lib/geo";
 import { haptic, openLink, openTelegramLink } from "../../lib/telegram";
 import type { Review } from "../../lib/types";
-import { useApp, useCenter, useOrigin, useProfile, useBotUsername } from "../../store/app";
+import { IS_DEMO, useApp, useCenter, useOrigin, useProfile, useBotUsername } from "../../store/app";
 import { useNav } from "../../store/nav";
 import { ApplySheet } from "./ApplySheet";
 
@@ -60,7 +60,8 @@ export function CenterPage({ centerId }: { centerId: string }) {
   const [chatBusy, setChatBusy] = useState(false);
 
   useEffect(() => {
-    if (!backend || !c) return;
+    // Sharhlar hozircha faqat DEMO’da (haqiqiy rejimda sharh yozish hali yo‘q)
+    if (!backend || !c || !IS_DEMO) return;
     let alive = true;
     backend
       .loadReviews(c.id)
@@ -308,7 +309,7 @@ export function CenterPage({ centerId }: { centerId: string }) {
         )}
 
         {/* Sharhlar */}
-        {reviews && reviews.length > 0 && (
+        {IS_DEMO && reviews && reviews.length > 0 && (
           <>
             <div className="mb-2 mt-7 flex items-baseline justify-between px-5">
               <h2 className="text-title">Sharhlar</h2>
