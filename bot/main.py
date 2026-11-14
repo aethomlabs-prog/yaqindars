@@ -8,6 +8,7 @@
 """
 import asyncio
 import json
+import ssl
 import logging
 import logging.handlers
 import platform
@@ -60,11 +61,43 @@ INSTALL_URL = _with_param(WEBAPP_URL, "install", "1")
 OWNER_URL = _with_param(WEBAPP_URL, "mode", "owner")  # ta'lim beruvchi kabineti
 PRIVACY_URL = urljoin(WEBAPP_URL.split("?")[0], "privacy")  # webapp/public/privacy.html
 
+def _trust_system_certs():
+    """Windows'da antivirus (masalan Avast) yoki korporativ proxy HTTPS'ni o'z sertifikati bilan tekshiradi.
+    Python (certifi) va gRPC (Firestore) bu sertifikatni tanimaydi -> CERTIFICATE_VERIFY_FAILED.
+    Yechim: Windows sertifikat ombori + certifi'ni bitta faylga yig'ib, gRPC va requests'ga beramiz.
+    Linux/Docker (Railway, Render) — tegmaymiz."""
+    if os.name != "nt" or os.getenv("GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"):
+        return
+    try:
+        import ssl as _ssl
+        import tempfile
+
+        import certifi as _certifi
+
+        pems = [open(_certifi.where(), encoding="utf-8").read()]
+        for store in ("ROOT", "CA"):
+            for der, enc, _trust in _ssl.enum_certificates(store):
+                if enc == "x509_asn":
+                    pems.append(_ssl.DER_cert_to_PEM_cert(der))
+        path = os.path.join(tempfile.gettempdir(), "yaqindars-ca-bundle.pem")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(pems))
+        os.environ["GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"] = path
+        os.environ.setdefault("REQUESTS_CA_BUNDLE", path)
+        os.environ.setdefault("SSL_CERT_FILE", path)
+    except Exception as e:  # noqa: BLE001
+        print(f"Ogohlantirish: tizim sertifikatlarini yig'ib bo'lmadi: {e}")
+
+
+_trust_system_certs()
+
 import firebase_admin  # noqa: E402
 from aiogram import Bot, Dispatcher, F, Router  # noqa: E402
+import certifi  # noqa: E402
 from aiogram.client.default import DefaultBotProperties  # noqa: E402
+from aiogram.client.session.aiohttp import AiohttpSession  # noqa: E402
 from aiogram.enums import ParseMode  # noqa: E402
-from aiogram.exceptions import TelegramBadRequest  # noqa: E402
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError  # noqa: E402
 from aiogram.filters import Command, CommandObject, CommandStart, StateFilter  # noqa: E402
 from aiogram.fsm.context import FSMContext  # noqa: E402
 from aiogram.fsm.state import State, StatesGroup  # noqa: E402
@@ -1548,6 +1581,17 @@ async def reminder_loop(bot: Bot):
 
 
 # ---------------- Main ----------------
+def make_session() -> AiohttpSession:
+    """Telegram'ga ulanish: certifi + tizim (Windows/Linux) sertifikatlari.
+    Antivirus (masalan Avast) yoki korporativ proxy HTTPS'ni o'z sertifikati bilan tekshirsa ham ishlaydi —
+    aiogram standart holatda faqat certifi'ga ishonadi va CERTIFICATE_VERIFY_FAILED beradi."""
+    session = AiohttpSession()
+    ctx = ssl.create_default_context()  # tizim ombori
+    ctx.load_verify_locations(certifi.where())
+    session._connector_init["ssl"] = ctx
+    return session
+
+
 async def main():
     logging.basicConfig(
         level=os.getenv("LOG_LEVEL", "INFO").upper(),
@@ -1557,11 +1601,21 @@ async def main():
     )
     logging.getLogger("aiogram.event").setLevel(logging.WARNING)
     log_listener = install_firestore_logging()
-    bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    bot = Bot(BOT_TOKEN, session=make_session(), default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
     dp.include_router(router)
 
-    await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Ochish", web_app=WebAppInfo(url=WEBAPP_URL)))
+    # Ishga tushishda tarmoq vaqtincha uzilsa — yiqilmasdan qayta urinamiz (5, 10, 20, 40 s)
+    for attempt in range(5):
+        try:
+            await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Ochish", web_app=WebAppInfo(url=WEBAPP_URL)))
+            break
+        except TelegramNetworkError as e:
+            if attempt == 4:
+                raise
+            wait = 5 * 2 ** attempt
+            log.warning("Telegram'ga ulanib bo'lmadi (%s) — %s s dan keyin qayta urinaman", e, wait)
+            await asyncio.sleep(wait)
     await bot.set_my_commands([
         BotCommand(command="start", description="Bosh menyu"),
         BotCommand(command="markaz", description="Markazni qo‘shish / boshqarish"),
