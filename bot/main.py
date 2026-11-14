@@ -55,7 +55,8 @@ def _with_param(url: str, key: str, value: str) -> str:
 
 # Markazni ro'yxatdan o'tkazish Mini App'i (o'sha web app, ?mode=register)
 REGISTER_URL = _with_param(WEBAPP_URL, "mode", "register")
-INSTALL_URL = _with_param(WEBAPP_URL, "install", "1")  # ilova ochilishi bilan «Bosh ekranga qo‘shish»
+# Ilovani TELEGRAM'SIZ (brauzer orqali haqiqiy ilova — PWA) o'rnatish sahifasi; URL tugma bilan brauzerda ochiladi
+INSTALL_URL = _with_param(WEBAPP_URL, "install", "1")
 OWNER_URL = _with_param(WEBAPP_URL, "mode", "owner")  # ta'lim beruvchi kabineti
 PRIVACY_URL = urljoin(WEBAPP_URL.split("?")[0], "privacy")  # webapp/public/privacy.html
 
@@ -299,11 +300,17 @@ def ibtn(text: str, url: str, style: str | None = None) -> InlineKeyboardButton:
     return InlineKeyboardButton(text=text, web_app=WebAppInfo(url=url), style=style)
 
 
+def install_btn(text: str = "📲 Ilovani telefonga o‘rnatish") -> InlineKeyboardButton:
+    """Havola tugmasi: sayt BRAUZERDA ochiladi va u yerdan alohida ilova sifatida o'rnatiladi
+    (Telegram'ning «bosh ekranga qo'shish» yorlig'i har doim Telegram'ni ochadi)."""
+    return InlineKeyboardButton(text=text, url=INSTALL_URL, style="success")
+
+
 def main_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [
-                KeyboardButton(text=BTN_INSTALL, web_app=WebAppInfo(url=INSTALL_URL), style="success"),
+                KeyboardButton(text=BTN_INSTALL, style="success"),  # bosilganda bot havola tugmasini yuboradi
                 KeyboardButton(text=BTN_OPEN, web_app=WebAppInfo(url=WEBAPP_URL), style="primary"),
             ],
             [KeyboardButton(text=BTN_ADMIN), KeyboardButton(text=BTN_TEACHER)],
@@ -316,7 +323,7 @@ def main_menu() -> ReplyKeyboardMarkup:
 
 def welcome_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [ibtn("📲 Ilovani telefonga o‘rnatish", INSTALL_URL, "success")],
+        [install_btn()],
         [ibtn("🚀 Telegramda ochish", WEBAPP_URL, "primary")],
     ])
 
@@ -342,12 +349,19 @@ async def start(message: Message, state: FSMContext, command: CommandObject):
 @router.message(F.text == BTN_INSTALL)
 @router.message(F.text == BTN_OPEN)
 async def menu_open(message: Message, state: FSMContext):
-    # Eski Telegram'da web_app reply tugmasi oddiy matn bo'lib keladi — inline tugma bilan javob beramiz
     await state.clear()
-    install = message.text == BTN_INSTALL
-    kb = InlineKeyboardMarkup(inline_keyboard=[[ibtn(
-        "📲 O‘rnatish" if install else "🚀 Ochish", INSTALL_URL if install else WEBAPP_URL, "success" if install else "primary"
-    )]])
+    if message.text == BTN_INSTALL:
+        kb = InlineKeyboardMarkup(inline_keyboard=[[install_btn("📲 Brauzerda ochib o‘rnatish")]])
+        return await message.answer(
+            "📲 <b>Ilovani o‘rnatish</b>\n\n"
+            "Tugmani bosing — sayt brauzerda ochiladi:\n"
+            "• <b>Android (Chrome):</b> «O‘rnatish» oynasida «Ha» ni bosing\n"
+            "• <b>iPhone (Safari):</b> «Ulashish» → «Bosh ekranga qo‘shish»\n\n"
+            "Shundan keyin YaqinDars bosh ekranda alohida ilova bo‘lib turadi va Telegram’siz ochiladi.",
+            reply_markup=kb,
+        )
+    # Eski Telegram'da web_app reply tugmasi oddiy matn bo'lib keladi — inline tugma bilan javob beramiz
+    kb = InlineKeyboardMarkup(inline_keyboard=[[ibtn("🚀 Ochish", WEBAPP_URL, "primary")]])
     await message.answer("Pastdagi tugmani bosing 👇", reply_markup=kb)
 
 
