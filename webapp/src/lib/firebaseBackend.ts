@@ -26,7 +26,7 @@ import {
   type DocumentData,
   type Firestore
 } from "firebase/firestore";
-import { FIREBASE_CONFIG, FUNCTIONS_URL } from "../../config";
+import { FIREBASE_CONFIG } from "../../config";
 import type { ApplyInput, Backend, OwnerApi, OwnerCenter, ProfileDoc } from "./backend";
 import { centerChatId } from "./backend";
 import { ruleBasedReply } from "./match";
@@ -187,6 +187,8 @@ export async function createFirebaseBackend(): Promise<Backend> {
   ]);
   // Firestore yo'llari (users/{id}, chats/{id}_...) Telegram ID bo'yicha
   const tg = link.tg;
+  // Bot GROQ_API_KEY bilan ishga tushgan bo'lsa meta/public.aiEnabled = true
+  const aiOn = meta?.aiEnabled === true;
   const uid: string | null = tg ? String(tg) : null;
   const authed = !!uid;
   const tgId = uid ? Number(uid) : null;
@@ -245,7 +247,7 @@ export async function createFirebaseBackend(): Promise<Backend> {
     offline: link.offline,
     botUsername: typeof meta?.botUsername === "string" ? meta.botUsername : undefined,
     centerChatEnabled: authed,
-    aiEnabled: authed && !!FUNCTIONS_URL,
+    aiEnabled: authed && aiOn,
 
     async loadCenters() {
       const snap = await getDocs(centersQuery(db));
@@ -451,20 +453,41 @@ export async function createFirebaseBackend(): Promise<Backend> {
     },
 
     async askAI(q, history, ctx) {
-      if (uid && FUNCTIONS_URL) {
+      // AI (Groq) bot orqali: savol aiRequests'ga yoziladi, bot javobni shu hujjatga yozadi.
+      // Bot o'chiq / kalit yo'q / xato / 30 s — oddiy qidiruv (fallback).
+      if (uid && aiOn) {
         try {
-          const token = await auth.currentUser!.getIdToken();
-          const r = await fetch(`${FUNCTIONS_URL.replace(/\/$/, "")}/aiChat`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ query: q, history: history.slice(-8), pos: ctx.pos })
+          const ref = await addDoc(collection(db, "aiRequests"), {
+            userTgId: tgId,
+            query: q.slice(0, 500),
+            history: history.slice(-8).map((h) => ({ from: h.from, text: h.text.slice(0, 500) })),
+            pos: { lat: ctx.pos.lat, lng: ctx.pos.lng },
+            status: "pending",
+            createdAt: serverTimestamp()
           });
-          if (r.ok) {
-            const j = await r.json();
-            if (typeof j.text === "string") return { text: j.text, cards: Array.isArray(j.cards) ? j.cards.slice(0, 3) : [] };
-          }
+          const res = await new Promise<{ text: string; cards: string[] } | null>((resolve) => {
+            let done = false;
+            const finish = (v: { text: string; cards: string[] } | null) => {
+              if (done) return;
+              done = true;
+              clearTimeout(timer);
+              unsub();
+              resolve(v);
+            };
+            const timer = setTimeout(() => finish(null), 30000);
+            const unsub = onSnapshot(
+              ref,
+              (snap) => {
+                const d = snap.data();
+                if (d?.status === "done" && typeof d.text === "string") finish({ text: d.text, cards: Array.isArray(d.cards) ? d.cards.slice(0, 3) : [] });
+                else if (d?.status === "error") finish(null);
+              },
+              () => finish(null)
+            );
+          });
+          if (res) return res;
         } catch (e) {
-          console.warn("aiChat:", e);
+          console.warn("aiRequests:", e);
         }
       }
       return { ...ruleBasedReply(ctx.centers, q, ctx.pos), fallback: true };

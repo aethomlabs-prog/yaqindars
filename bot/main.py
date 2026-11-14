@@ -61,6 +61,12 @@ INSTALL_URL = _with_param(WEBAPP_URL, "install", "1")
 OWNER_URL = _with_param(WEBAPP_URL, "mode", "owner")  # ta'lim beruvchi kabineti
 PRIVACY_URL = urljoin(WEBAPP_URL.split("?")[0], "privacy")  # webapp/public/privacy.html
 
+# AI yordamchi (Groq, ixtiyoriy). Kalit bo'lmasa — ilovada oddiy qidiruv ishlaydi.
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+AI_PER_HOUR = 20  # bitta foydalanuvchi soatiga nechta savol bera oladi
+
 def _trust_system_certs():
     """Windows'da antivirus (masalan Avast) yoki korporativ proxy HTTPS'ni o'z sertifikati bilan tekshiradi.
     Python (certifi) va gRPC (Firestore) bu sertifikatni tanimaydi -> CERTIFICATE_VERIFY_FAILED.
@@ -91,6 +97,7 @@ def _trust_system_certs():
 
 _trust_system_certs()
 
+import aiohttp  # noqa: E402
 import firebase_admin  # noqa: E402
 from aiogram import Bot, Dispatcher, F, Router  # noqa: E402
 import certifi  # noqa: E402
@@ -118,13 +125,16 @@ from google.cloud.firestore_v1.base_query import FieldFilter  # noqa: E402
 
 from parsers import (  # noqa: E402
     TARIFF_PRICES,
+    AI_SYSTEM,
     TASHKENT,
     RegError,
+    ai_catalog,
     next_lesson,
     normalize_phone,
     parse_days,
     parse_int,
     parse_registration,
+    parse_ai_reply,
     parse_time,
     validate_init_data,
 )
@@ -137,7 +147,8 @@ CHATS = db.collection("chats")
 WAITLIST = db.collection("waitlist")
 LINKS = db.collection("tgLinks")  # Mini App -> Telegram tasdiqlash so'rovlari
 USERS = db.collection("users")
-DELETE_REQS = db.collection("deleteRequests")  # ilovadagi «Ma’lumotlarimni o‘chirish»
+DELETE_REQS = db.collection("deleteRequests")
+AI_REQS = db.collection("aiRequests")  # ilovadagi AI yordamchi savollari  # ilovadagi «Ma’lumotlarimni o‘chirish»
 
 SUBJECTS = ["Ingliz tili", "Matematika", "IT", "Rus tili", "Kimyo", "Biologiya", "Fizika", "Ona tili", "Sport", "Boshqa"]
 PRICE_MIN, PRICE_MAX = 10_000, 10_000_000
@@ -1565,6 +1576,7 @@ def cleanup_once(now: datetime | None = None) -> dict:
     return {
         "arizalar": _delete_older(APPS, "createdAt", now - APPS_RETENTION),
         "loglar": _delete_older(db.collection("logs"), "createdAt", now - LOGS_RETENTION),
+        "ai_savollar": _delete_older(AI_REQS, "createdAt", now - timedelta(days=1)),
     }
 
 
@@ -1577,6 +1589,89 @@ async def cleanup_loop():
         except Exception:  # noqa: BLE001
             log.exception("Kunlik tozalashda xato")
         await asyncio.sleep(CLEANUP_EVERY)
+
+
+# ---------------- AI yordamchi (Groq): ilova savoli -> javob ----------------
+_ai_usage: dict[int, list[float]] = {}
+_centers_cache: dict = {"at": 0.0, "items": []}
+
+
+def _approved_centers() -> list:
+    """Tasdiqlangan markazlar (5 daqiqa keshda — har savolda bazani o'qimaslik uchun)."""
+    if time.time() - _centers_cache["at"] > 300:
+        items = []
+        for d in CENTERS.where(filter=FieldFilter("approved", "==", True)).stream():
+            c = as_dict(d)
+            c["id"] = d.id
+            items.append(c)
+        _centers_cache.update(at=time.time(), items=items)
+    return _centers_cache["items"]
+
+
+def _ai_allowed(uid: int) -> bool:
+    now = time.time()
+    hist = [t for t in _ai_usage.get(uid, []) if now - t < 3600]
+    if len(hist) >= AI_PER_HOUR:
+        _ai_usage[uid] = hist
+        return False
+    hist.append(now)
+    _ai_usage[uid] = hist
+    return True
+
+
+async def groq_chat(messages: list) -> str:
+    timeout = aiohttp.ClientTimeout(total=25)
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context()), timeout=timeout) as s:
+        async with s.post(
+            GROQ_URL,
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+            json={
+                "model": GROQ_MODEL,
+                "messages": messages,
+                "temperature": 0.3,
+                "max_tokens": 600,
+                "response_format": {"type": "json_object"},
+            },
+        ) as r:
+            if r.status != 200:
+                raise RuntimeError(f"Groq {r.status}: {(await r.text())[:300]}")
+            data = await r.json()
+            return data["choices"][0]["message"]["content"]
+
+
+async def process_ai_request(ref):
+    req = await claim_if(ref, lambda d: d.get("status") == "pending", {"status": "processing"})
+    if not req:
+        return
+    uid = req.get("userTgId")
+    if not isinstance(uid, int) or not _ai_allowed(uid):
+        await asyncio.to_thread(ref.update, {"status": "done", "text": "Bir soatda juda ko‘p savol berildi. Birozdan keyin qayta urinib ko‘ring.", "cards": []})
+        return
+    try:
+        pos = req.get("pos") or {}
+        lat, lng = float(pos.get("lat", 40.3567)), float(pos.get("lng", 71.2847))
+        catalog, ids = ai_catalog(await asyncio.to_thread(_approved_centers), lat, lng)
+        messages = [{"role": "system", "content": AI_SYSTEM + "\n\nKATALOG (foydalanuvchiga eng yaqinlari):\n" + catalog}]
+        for h in (req.get("history") or [])[-6:]:
+            if isinstance(h, dict) and isinstance(h.get("text"), str):
+                messages.append({"role": "assistant" if h.get("from") == "ai" else "user", "content": h["text"][:500]})
+        messages.append({"role": "user", "content": str(req.get("query", ""))[:500]})
+        reply = parse_ai_reply(await groq_chat(messages), ids)
+        if not reply:
+            raise RuntimeError("AI javobi yaroqsiz")
+        await asyncio.to_thread(ref.update, {"status": "done", **reply, "doneAt": firestore.SERVER_TIMESTAMP})
+    except Exception as e:  # noqa: BLE001
+        log.warning("AI so'rovi bajarilmadi: %s", e)
+        await asyncio.to_thread(ref.update, {"status": "error"})  # ilova oddiy qidiruvga o'tadi
+
+
+def start_ai_watcher(loop: asyncio.AbstractEventLoop):
+    def on_snapshot(_docs, changes, _read_time):
+        for ch in changes:
+            if ch.type.name == "ADDED":
+                asyncio.run_coroutine_threadsafe(process_ai_request(ch.document.reference), loop)
+
+    return AI_REQS.where(filter=FieldFilter("status", "==", "pending")).on_snapshot(on_snapshot)
 
 
 # ---------------- Weekly reminder ----------------
@@ -1618,14 +1713,18 @@ async def reminder_loop(bot: Bot):
 
 
 # ---------------- Main ----------------
+def ssl_context() -> ssl.SSLContext:
+    ctx = ssl.create_default_context()  # tizim ombori
+    ctx.load_verify_locations(certifi.where())
+    return ctx
+
+
 def make_session() -> AiohttpSession:
     """Telegram'ga ulanish: certifi + tizim (Windows/Linux) sertifikatlari.
     Antivirus (masalan Avast) yoki korporativ proxy HTTPS'ni o'z sertifikati bilan tekshirsa ham ishlaydi —
     aiogram standart holatda faqat certifi'ga ishonadi va CERTIFICATE_VERIFY_FAILED beradi."""
     session = AiohttpSession()
-    ctx = ssl.create_default_context()  # tizim ombori
-    ctx.load_verify_locations(certifi.where())
-    session._connector_init["ssl"] = ctx
+    session._connector_init["ssl"] = ssl_context()
     return session
 
 
@@ -1663,7 +1762,10 @@ async def main():
 
     me = await bot.get_me()
     # Web app «Ulashish» va «Markaz qo‘shish» havolalari uchun bot username'i (ochiq ma'lumot)
-    await asyncio.to_thread(db.collection("meta").document("public").set, {"botUsername": me.username}, merge=True)
+    # Ochiq sozlamalar: bot username (ulashish havolalari) va AI yoqilganmi
+    await asyncio.to_thread(
+        db.collection("meta").document("public").set, {"botUsername": me.username, "aiEnabled": bool(GROQ_API_KEY)}, merge=True
+    )
 
     loop = asyncio.get_running_loop()
     watch = start_application_watcher(bot, loop)
@@ -1672,9 +1774,11 @@ async def main():
     statuses = start_status_watcher(bot, loop)
     seats = start_seats_watcher(bot, loop)
     deletes = start_delete_watcher(bot, loop)
+    ai = start_ai_watcher(loop) if GROQ_API_KEY else None
     reminder = asyncio.create_task(reminder_loop(bot))
     cleanup = asyncio.create_task(cleanup_loop())
-    log.info("Bot ishga tushdi. Adminlar: %s", ", ".join(map(str, ADMIN_IDS)) or "yo‘q")
+    log.info("Bot ishga tushdi. Adminlar: %s | AI: %s", ", ".join(map(str, ADMIN_IDS)) or "yo‘q",
+             f"Groq ({GROQ_MODEL})" if GROQ_API_KEY else "o‘chiq (GROQ_API_KEY yo‘q)")
     try:
         await dp.start_polling(bot)
     finally:
@@ -1684,6 +1788,8 @@ async def main():
         statuses.unsubscribe()
         seats.unsubscribe()
         deletes.unsubscribe()
+        if ai:
+            ai.unsubscribe()
         reminder.cancel()
         cleanup.cancel()
         log_listener.stop()

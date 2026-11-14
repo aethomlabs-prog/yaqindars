@@ -8,7 +8,7 @@ import hmac
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
-from parsers import RegError, next_lesson, normalize_phone, parse_days, parse_int, parse_registration, parse_time, validate_init_data
+from parsers import ai_catalog, parse_ai_reply, RegError, next_lesson, normalize_phone, parse_days, parse_int, parse_registration, parse_time, validate_init_data
 
 
 class DaysTest(unittest.TestCase):
@@ -144,6 +144,31 @@ class NextLessonTest(unittest.TestCase):
         r = next_lesson(["Du", "Ch"], "16:00–17:30", now)
         self.assertEqual((r.weekday(), r.hour, r.minute), (2, 16, 0))  # chorshanba 16:00
         self.assertIsNone(next_lesson([], "16:00", now))
+
+
+class AiTest(unittest.TestCase):
+    centers = [
+        {"id": "a", "name": "Uzoq", "lat": 41.0, "lng": 71.0, "groups": [{"subject": "IT", "days": ["Du"], "time": "10:00–11:00", "price": 100000, "freeSeats": 2}]},
+        {"id": "b", "name": "Yaqin", "lat": 40.357, "lng": 71.285, "vip": True, "rating": 4.8, "ageFrom": 7, "ageTo": 12,
+         "groups": [{"subject": "Ingliz tili", "days": ["Se", "Pa"], "time": "16:00–17:30", "price": 300000, "freeSeats": 0}],
+         "teachers": [{"subject": "Ingliz tili"}]},
+    ]
+
+    def test_catalog_sorted_and_limited(self):
+        text, ids = ai_catalog(self.centers, 40.357, 71.285, limit=1)
+        self.assertEqual(ids, {"b"})
+        self.assertIn("id=b", text)
+        self.assertIn("bo‘sh joy 0", text)
+        self.assertIn("7–12 yosh", text)
+
+    def test_reply_filters_unknown_ids(self):
+        r = parse_ai_reply('{"text": "Mana", "cards": ["b", "x", "b", "a"]}', {"a", "b"})
+        self.assertEqual(r, {"text": "Mana", "cards": ["b", "a"]})
+
+    def test_reply_extracts_json_and_rejects_garbage(self):
+        self.assertEqual(parse_ai_reply('Javob: {"text": "Ok", "cards": []} tamom', {"a"})["text"], "Ok")
+        self.assertIsNone(parse_ai_reply("salom", {"a"}))
+        self.assertIsNone(parse_ai_reply('{"cards": ["a"]}', {"a"}))
 
 if __name__ == "__main__":
     unittest.main()

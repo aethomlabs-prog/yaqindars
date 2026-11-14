@@ -61,6 +61,19 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // AI yordamchi: foydalanuvchi savol yozadi, javobni bot (Groq orqali) yozadi.
+    match /aiRequests/{id} {
+      allow read: if isTg(resource.data.userTgId);
+      allow create: if isTg(request.resource.data.userTgId)
+        && request.resource.data.keys().hasOnly(['userTgId', 'query', 'history', 'pos', 'status', 'createdAt'])
+        && request.resource.data.query is string && request.resource.data.query.size() > 0 && request.resource.data.query.size() <= 500
+        && request.resource.data.history is list && request.resource.data.history.size() <= 8
+        && request.resource.data.pos is map
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
     // «Ma'lumotlarimni o'chirish»: foydalanuvchi so'rov qoldiradi, o'chirishni bot (Admin SDK) bajaradi.
     match /deleteRequests/{tgId} {
       allow read: if tg() != null && string(tg()) == tgId;

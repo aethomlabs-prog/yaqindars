@@ -246,3 +246,90 @@ def next_lesson(days: list, time_range: str, now: _dt | None = None):
         if day.weekday() in wanted:
             return day.replace(hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0)
     return None
+
+
+# ---------------- AI yordamchi (Groq) ----------------
+import math  # noqa: E402
+
+AI_SYSTEM = (
+    "Sen — YaqinDars ilovasining yordamchisisan. YaqinDars Rishton tumanida ota-onalar va o‘quvchilarga "
+    "uyiga yaqin o‘quv markazlari, to‘garaklar va repetitorlarni topishga yordam beradi.\n\n"
+    "QOIDALAR:\n"
+    "1. Faqat shu mavzuda javob ber: farzand yoki o‘zi uchun kurs, o‘quv markazi, to‘garak yoki repetitor tanlash; "
+    "fanlar, narx, dars kunlari va vaqti, masofa, bo‘sh joylar, o‘qituvchilar, bepul sinov darsi, ilovadan foydalanish. "
+    "Boshqa mavzudagi savollarga (siyosat, din, kod yozish, uy vazifasini yechish, umumiy suhbat, tibbiy yoki huquqiy "
+    "maslahat va h.k.) bir gap bilan xushmuomala rad et va nima bilan yordam bera olishingni ayt; bunda cards bo‘sh bo‘lsin.\n"
+    "2. Markazlarni FAQAT quyidagi KATALOGdan tavsiya qil. Katalogda yo‘q markaz, narx, vaqt, telefon yoki manzilni "
+    "hech qachon o‘ylab topma. Mos markaz bo‘lmasa — ochiq ayt va shartni yumshatishni (narx, kun, fan) taklif qil.\n"
+    "3. Ko‘pi bilan 3 ta markaz tavsiya qil: avval bo‘sh joyi borlari, keyin yaqinroqlari. Har biri uchun tanlov sababini "
+    "qisqa ayt (fan, narx, kun, masofa, bo‘sh joy).\n"
+    "4. Javob o‘zbek tilida (lotin yozuvida), 1–4 qisqa gap, samimiy. Markdown, yulduzcha va ro‘yxat belgilarini ishlatma.\n"
+    "5. Yozilish haqida so‘rashsa: markaz sahifasidagi «Bepul sinov darsi» tugmasini bosish kerakligini ayt.\n"
+    "6. Shaxsiy ma’lumot (telefon, manzil, ism) so‘rama.\n"
+    "7. Javobni FAQAT JSON ko‘rinishida qaytar: {\"text\": \"javob matni\", \"cards\": [\"markaz_id\", ...]} — "
+    "cards ichida faqat KATALOGdagi id’lar (ko‘pi bilan 3 ta)."
+)
+
+
+def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    r = math.radians
+    d = math.sin(r(lat2 - lat1) / 2) ** 2 + math.cos(r(lat1)) * math.cos(r(lat2)) * math.sin(r(lng2 - lng1) / 2) ** 2
+    return 6371 * 2 * math.asin(math.sqrt(d))
+
+
+def ai_catalog(centers: list, lat: float, lng: float, limit: int = 40) -> tuple[str, set]:
+    """AI uchun ixcham katalog (eng yaqin `limit` ta). Qaytaradi: (matn, id'lar to'plami)."""
+    rows = []
+    for c in centers:
+        try:
+            km = haversine_km(lat, lng, float(c["lat"]), float(c["lng"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        rows.append((km, c))
+    rows.sort(key=lambda x: x[0])
+    lines, ids = [], set()
+    for km, c in rows[:limit]:
+        cid = str(c.get("id", ""))
+        if not cid:
+            continue
+        ids.add(cid)
+        groups = "; ".join(
+            f"{g.get('subject', '')} {','.join(g.get('days') or [])} {g.get('time', '')} "
+            f"{int(g.get('price') or 0)} so‘m, bo‘sh joy {int(g.get('freeSeats') or 0)}"
+            for g in (c.get("groups") or [])[:8]
+        )
+        age = f" | {c['ageFrom']}–{c['ageTo']} yosh" if c.get("ageFrom") and c.get("ageTo") else ""
+        teachers = ", ".join(sorted({str(t.get("subject", "")) for t in (c.get("teachers") or []) if t.get("subject")}))
+        lines.append(
+            f"id={cid} | {str(c.get('name', ''))[:60]} | {'repetitor' if c.get('kind') == 'tutor' else 'markaz'} | "
+            f"{km:.1f} km | {'VIP | ' if c.get('vip') else ''}"
+            f"{('reyting ' + str(c['rating']) + ' | ') if c.get('rating') else ''}"
+            f"{groups or 'guruh yo‘q'}{age}{(' | ustozlar: ' + teachers) if teachers else ''}"
+        )
+    return "\n".join(lines) or "(katalog bo‘sh)", ids
+
+
+def parse_ai_reply(raw: str, valid_ids: set) -> dict | None:
+    """AI javobidan {"text", "cards"} — katalogda yo'q id'lar tashlab yuboriladi. Yaroqsiz bo'lsa None."""
+    if not raw:
+        return None
+    s = raw.strip()
+    if not s.startswith("{"):
+        a, b = s.find("{"), s.rfind("}")
+        if a < 0 or b <= a:
+            return None
+        s = s[a : b + 1]
+    try:
+        d = json.loads(s)
+    except ValueError:
+        return None
+    text = d.get("text") if isinstance(d, dict) else None
+    if not isinstance(text, str) or not text.strip():
+        return None
+    cards = d.get("cards") if isinstance(d.get("cards"), list) else []
+    seen, out = set(), []
+    for c in cards:
+        if isinstance(c, str) and c in valid_ids and c not in seen:
+            seen.add(c)
+            out.append(c)
+    return {"text": text.strip()[:1200], "cards": out[:3]}
