@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { BOT_USERNAME, FIREBASE_CONFIG, FORCE_DEMO } from "../../config";
+import { BOT_USERNAME, FIREBASE_CONFIG, FORCE_DEMO, LANG_SWITCH_ENABLED } from "../../config";
 import type { Backend, ProfileDoc } from "../lib/backend";
 import { getCurrentPosition, RISHTON, watchPosition } from "../lib/geo";
 import { haptic, tgUser } from "../lib/telegram";
@@ -39,11 +39,18 @@ export const useSettings = create<Settings>()(
         syncProfile({ theme });
       },
       setLang: (lang) => {
+        if (!LANG_SWITCH_ENABLED) return; // rus tili hali tayyor emas
         set({ lang });
         syncProfile({ lang });
       }
     }),
-    { name: "yd-settings", storage: safeStorage, partialize: (s) => ({ theme: s.theme, lang: s.lang }) }
+    {
+      name: "yd-settings",
+      storage: safeStorage,
+      partialize: (s) => ({ theme: s.theme, lang: s.lang }),
+      // ilgari saqlangan "ru" bo‘lsa ham hozircha o‘zbekcha
+      merge: (persisted, current) => ({ ...current, ...(persisted as object), ...(LANG_SWITCH_ENABLED ? {} : { lang: "uz" as const }) })
+    }
   )
 );
 
@@ -227,7 +234,7 @@ export const useApp = create<AppState>((set, get) => ({
         const { theme, lang, ...rest } = p;
         useProfile.setState(rest);
         if (theme) useSettings.setState({ theme });
-        if (lang) useSettings.setState({ lang });
+        if (lang && LANG_SWITCH_ENABLED) useSettings.setState({ lang });
       }
     }
   },

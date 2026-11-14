@@ -25,5 +25,8 @@ export const FUNCTIONS_URL: string = "";
 /** Bot username (@ siz) — /markaz havolasi va «Ulashish» uchun. */
 export const BOT_USERNAME: string = "";
 
+/** Rus tili tarjimasi tayyor bo‘lguncha til tanlash yashirin, interfeys doim o‘zbekcha. */
+export const LANG_SWITCH_ENABLED = false;
+
 /** DEMO rejimni majburan yoqish: URL oxiriga ?demo=1 qo‘shing. */
 export const FORCE_DEMO = typeof location !== "undefined" && new URLSearchParams(location.search).has("demo");
