@@ -102,6 +102,10 @@ PRICE_MIN, PRICE_MAX = 10_000, 10_000_000
 SEATS_MAX = 100
 REMIND_AFTER = timedelta(days=7)
 REMIND_CHECK_EVERY = 60 * 60  # soniya (sinov darsi eslatmalari uchun soatbay)
+# Maxfiylik siyosati: arizalar 12 oy, texnik xato yozuvlari 90 kun saqlanadi
+APPS_RETENTION = timedelta(days=365)
+LOGS_RETENTION = timedelta(days=90)
+CLEANUP_EVERY = 24 * 60 * 60  # soniya
 
 # FSM holatlarida buyruqlar (/...) matn sifatida qabul qilinmasin
 TEXT = F.text & ~F.text.startswith("/")
@@ -1376,6 +1380,39 @@ def start_delete_watcher(bot: Bot, loop: asyncio.AbstractEventLoop):
     return DELETE_REQS.where(filter=FieldFilter("status", "==", "pending")).on_snapshot(on_snapshot)
 
 
+# ---------------- Kunlik tozalash (maxfiylik siyosati) ----------------
+def _delete_older(col, field: str, before: datetime, batch_size: int = 300) -> int:
+    total = 0
+    while True:
+        docs = list(col.where(filter=FieldFilter(field, "<", before)).limit(batch_size).stream())
+        if not docs:
+            return total
+        batch = db.batch()
+        for d in docs:
+            batch.delete(d.reference)
+        batch.commit()
+        total += len(docs)
+
+
+def cleanup_once(now: datetime | None = None) -> dict:
+    now = now or datetime.now(timezone.utc)
+    return {
+        "arizalar": _delete_older(APPS, "createdAt", now - APPS_RETENTION),
+        "loglar": _delete_older(db.collection("logs"), "createdAt", now - LOGS_RETENTION),
+    }
+
+
+async def cleanup_loop():
+    while True:
+        try:
+            res = await asyncio.to_thread(cleanup_once)
+            if any(res.values()):
+                log.info("Kunlik tozalash: %s", res)
+        except Exception:  # noqa: BLE001
+            log.exception("Kunlik tozalashda xato")
+        await asyncio.sleep(CLEANUP_EVERY)
+
+
 # ---------------- Weekly reminder ----------------
 async def reminder_loop(bot: Bot):
     while True:
@@ -1442,6 +1479,7 @@ async def main():
     seats = start_seats_watcher(bot, loop)
     deletes = start_delete_watcher(bot, loop)
     reminder = asyncio.create_task(reminder_loop(bot))
+    cleanup = asyncio.create_task(cleanup_loop())
     log.info("Bot ishga tushdi. Adminlar: %s", ", ".join(map(str, ADMIN_IDS)) or "yo‘q")
     try:
         await dp.start_polling(bot)
@@ -1453,6 +1491,7 @@ async def main():
         seats.unsubscribe()
         deletes.unsubscribe()
         reminder.cancel()
+        cleanup.cancel()
         await bot.session.close()
 
 
