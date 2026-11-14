@@ -3,7 +3,12 @@ import unittest
 
 import json
 
-from parsers import RegError, normalize_phone, parse_days, parse_int, parse_registration, parse_time
+import hashlib
+import hmac
+from datetime import datetime, timezone
+from urllib.parse import urlencode
+
+from parsers import RegError, next_lesson, normalize_phone, parse_days, parse_int, parse_registration, parse_time, validate_init_data
 
 
 class DaysTest(unittest.TestCase):
@@ -107,6 +112,38 @@ class RegistrationTest(unittest.TestCase):
         r = parse_registration(_reg(af=17, at=7, tc=[], am=[], d=""))
         self.assertEqual((r["ageFrom"], r["ageTo"]), (7, 17))
         self.assertEqual(r["teachers"], [])
+
+
+TOKEN = "123:ABC"
+
+
+def _signed(fields: dict, token: str = TOKEN) -> str:
+    check = "\n".join(f"{k}={v}" for k, v in sorted(fields.items()))
+    secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
+    return urlencode({**fields, "hash": hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()})
+
+
+class InitDataTest(unittest.TestCase):
+    fields = {"auth_date": "1000", "query_id": "Q", "user": json.dumps({"id": 42, "first_name": "Ali"}), "signature": "sig"}
+
+    def test_valid(self):
+        self.assertEqual(validate_init_data(_signed(self.fields), TOKEN, now=1500)["id"], 42)
+
+    def test_invalid(self):
+        good = _signed(self.fields)
+        self.assertIsNone(validate_init_data(good, "999:OTHER", now=1500))        # boshqa bot
+        self.assertIsNone(validate_init_data(good.replace("Ali", "Vali"), TOKEN, now=1500))  # o'zgartirilgan
+        self.assertIsNone(validate_init_data(good, TOKEN, now=1000 + 86401))       # eskirgan
+        self.assertIsNone(validate_init_data("", TOKEN))
+        self.assertIsNone(validate_init_data("user=x", TOKEN))
+
+
+class NextLessonTest(unittest.TestCase):
+    def test_next(self):
+        now = datetime(2026, 11, 16, 10, 0, tzinfo=timezone.utc)  # dushanba
+        r = next_lesson(["Du", "Ch"], "16:00–17:30", now)
+        self.assertEqual((r.weekday(), r.hour, r.minute), (2, 16, 0))  # chorshanba 16:00
+        self.assertIsNone(next_lesson([], "16:00", now))
 
 if __name__ == "__main__":
     unittest.main()

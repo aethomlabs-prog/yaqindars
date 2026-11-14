@@ -2,7 +2,6 @@
 import { motion } from "framer-motion";
 import { AlertTriangle, BellPlus, Clock, Heart, MapPin, MessageCircle, Navigation, Phone, Share, Star, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { BOT_USERNAME } from "../../../config";
 import { Rating } from "../../components/cards";
 import { SubjectIcon } from "../../components/brand";
 import { Avatar, Button, EmptyState, SeatChip, VipBadge } from "../../components/ios/controls";
@@ -13,7 +12,7 @@ import { fmtDate, fmtSum, isStale, updatedText } from "../../lib/format";
 import { distanceKm, formatDistance, routeUrl } from "../../lib/geo";
 import { haptic, openLink, openTelegramLink } from "../../lib/telegram";
 import type { Review } from "../../lib/types";
-import { useApp, useCenter, useOrigin, useProfile } from "../../store/app";
+import { useApp, useCenter, useOrigin, useProfile, useBotUsername } from "../../store/app";
 import { useNav } from "../../store/nav";
 import { ApplySheet } from "./ApplySheet";
 
@@ -46,6 +45,7 @@ function Stars({ n }: { n: number }) {
 
 export function CenterPage({ centerId }: { centerId: string }) {
   const c = useCenter(centerId);
+  const BOT_USERNAME = useBotUsername();
   const status = useApp((s) => s.centersStatus);
   const backend = useApp((s) => s.backend);
   const showToast = useApp((s) => s.showToast);

@@ -27,6 +27,8 @@ export interface Backend {
   authed: boolean;
   /** Markaz bilan chat ishlaydimi (auth kerak) */
   centerChatEnabled: boolean;
+  /** Bot username (bot ishga tushganda bazaga yozadi) — «Ulashish» havolalari uchun */
+  botUsername?: string;
   /** AI LLM backend ulanganmi (yo‘q bo‘lsa — qoidaga asoslangan) */
   aiEnabled: boolean;
 

@@ -1,13 +1,13 @@
 import { ExternalLink, MessageCircle, ShieldCheck, Store } from "lucide-react";
-import { BOT_USERNAME } from "../../../config";
 import { LogoMark } from "../../components/brand";
 import { Row, Section } from "../../components/ios/Grouped";
 import { Page } from "../../components/ios/Page";
 import { openLink, openTelegramLink } from "../../lib/telegram";
-import { IS_DEMO, useApp } from "../../store/app";
+import { IS_DEMO, useApp, useBotUsername } from "../../store/app";
 
 export function AboutPage() {
   const backend = useApp((s) => s.backend);
+  const BOT_USERNAME = useBotUsername();
   return (
     <Page title="Ilova haqida" back backLabel="Profil">
       <div className="flex flex-col items-center px-8 pb-8 pt-4 text-center">

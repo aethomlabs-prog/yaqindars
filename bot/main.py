@@ -68,29 +68,36 @@ from aiogram.types import (  # noqa: E402
     ReplyKeyboardRemove,
     WebAppInfo,
 )
-from firebase_admin import credentials, firestore  # noqa: E402
+from firebase_admin import auth as fb_auth, credentials, firestore  # noqa: E402
 from google.cloud.firestore_v1.base_query import FieldFilter  # noqa: E402
 
 from parsers import (  # noqa: E402
     TARIFF_PRICES,
+    TASHKENT,
     RegError,
+    next_lesson,
     normalize_phone,
     parse_days,
     parse_int,
     parse_registration,
     parse_time,
+    validate_init_data,
 )
 
 firebase_admin.initialize_app(credentials.Certificate(CRED_PATH))
 db = firestore.client()
 CENTERS = db.collection("centers")
 APPS = db.collection("applications")
+CHATS = db.collection("chats")
+WAITLIST = db.collection("waitlist")
+LINKS = db.collection("tgLinks")  # Mini App -> Telegram tasdiqlash so'rovlari
+USERS = db.collection("users")
 
 SUBJECTS = ["Ingliz tili", "Matematika", "IT", "Rus tili", "Kimyo", "Biologiya", "Fizika", "Ona tili", "Sport", "Boshqa"]
 PRICE_MIN, PRICE_MAX = 10_000, 10_000_000
 SEATS_MAX = 100
 REMIND_AFTER = timedelta(days=7)
-REMIND_CHECK_EVERY = 6 * 60 * 60  # soniya
+REMIND_CHECK_EVERY = 60 * 60  # soniya (sinov darsi eslatmalari uchun soatbay)
 
 # FSM holatlarida buyruqlar (/...) matn sifatida qabul qilinmasin
 TEXT = F.text & ~F.text.startswith("/")
@@ -119,6 +126,10 @@ class AddGroup(StatesGroup):
 
 class EditPrice(StatesGroup):
     price = State()
+
+
+class Reply(StatesGroup):
+    text = State()
 
 
 # ---------------- Helpers ----------------
@@ -510,10 +521,13 @@ async def on_group(call: CallbackQuery, state: FSMContext):
             return False
         return True
 
+    was_full = int(groups[idx].get("freeSeats", 0)) <= 0
     data = await update_groups(cid, call.from_user.id, change)
     if data is None:
         return await call.answer("Bu markazni boshqarishga ruxsatingiz yo‘q.", show_alert=True)
     await edit_panel(call.message, cid, data)
+    if action == "inc" and was_full:
+        asyncio.create_task(notify_waitlist(call.bot, cid, idx, data))
     await call.answer("Guruh o‘chirildi 🗑" if action == "del" else "Saqlandi ✅")
 
 
@@ -754,6 +768,115 @@ async def add_seats(message: Message, state: FSMContext):
     await send_panel(message, cid)
 
 
+# ---------------- Ariza holati (markaz egasi) ----------------
+APP_STATUS_TEXT = {"seen": "👁 Ko‘rildi", "accepted": "✅ Qabul qilindi", "rejected": "❌ Rad etildi"}
+
+
+def app_kb(app_id: str, status: str = "new"):
+    rows = []
+    if status in ("new", "seen"):
+        row = [btn("✅ Qabul qilish", "as", app_id, "ok"), btn("❌ Rad etish", "as", app_id, "no")]
+        if status == "new":
+            row.insert(0, btn("👁 Ko‘rdim", "as", app_id, "seen"))
+        rows.append(row)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def notify_user(bot: Bot, tg_id, text: str, open_app: bool = True):
+    """Ota-onaga Telegram xabari (botni boshlamagan bo'lsa — jim o'tkazib yuboriladi)."""
+    if not isinstance(tg_id, int):
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📱 Ilovani ochish", web_app=WebAppInfo(url=WEBAPP_URL))]]) if open_app else None
+    try:
+        await bot.send_message(tg_id, text, reply_markup=kb)
+    except Exception as e:  # noqa: BLE001
+        log.info("Foydalanuvchi %s ga yuborilmadi: %s", tg_id, e)
+
+
+@router.callback_query(F.data.startswith("as:"))
+async def on_app_status(call: CallbackQuery, bot: Bot):
+    try:
+        _, app_id, action = call.data.split(":")
+    except ValueError:
+        return await call.answer()
+    status = {"seen": "seen", "ok": "accepted", "no": "rejected"}.get(action)
+    snap = await asyncio.to_thread(APPS.document(app_id).get) if status and "/" not in app_id else None
+    if not snap or not snap.exists:
+        return await call.answer("Ariza topilmadi.", show_alert=True)
+    app = as_dict(snap)
+    center = await check_owner(call, str(app.get("centerId", "")))
+    if not center:
+        return
+    c = as_dict(center)
+    upd = {"status": status, "updatedAt": firestore.SERVER_TIMESTAMP}
+    trial = None
+    if status == "accepted":
+        groups = c.get("groups") or []
+        gi = app.get("groupIndex")
+        g = groups[gi] if isinstance(gi, int) and 0 <= gi < len(groups) else None
+        trial = next_lesson(g.get("days"), g.get("time")) if g else None
+        if trial:
+            upd["trialAt"] = trial
+    await asyncio.to_thread(APPS.document(app_id).update, upd)
+
+    try:
+        await call.message.edit_text(f"{call.message.html_text}\n\n<b>{APP_STATUS_TEXT[status]}</b>", reply_markup=app_kb(app_id, status))
+    except (TelegramBadRequest, AttributeError):
+        pass
+    await call.answer(APP_STATUS_TEXT[status])
+
+    name = escape(str(c.get("name", "")))
+    if status == "accepted":
+        when = f"\n🗓 Sinov darsi: <b>{trial.strftime('%d.%m, %H:%M')}</b>" if trial else ""
+        await notify_user(bot, app.get("tgUserId"), f"✅ <b>{name}</b> arizangizni qabul qildi!{when}\nMarkaz siz bilan telefon orqali bog‘lanadi.")
+    elif status == "rejected":
+        await notify_user(bot, app.get("tgUserId"), f"Afsuski, <b>{name}</b> hozircha arizangizni qabul qila olmadi. Ilovada boshqa guruhlarni ko‘ring.")
+
+
+# ---------------- Chat: markaz egasi javob beradi ----------------
+@router.callback_query(F.data.startswith("rp:"))
+async def reply_start(call: CallbackQuery, state: FSMContext):
+    chat_id = call.data.split(":", 1)[1]
+    snap = await asyncio.to_thread(CHATS.document(chat_id).get) if "/" not in chat_id else None
+    if not snap or not snap.exists:
+        return await call.answer("Suhbat topilmadi (o‘chirilgan bo‘lishi mumkin).", show_alert=True)
+    if not await check_owner(call, str(as_dict(snap).get("centerId", ""))):
+        return
+    await state.set_state(Reply.text)
+    await state.update_data(chat_id=chat_id)
+    who = escape(str(as_dict(snap).get("userName") or "Foydalanuvchi"))
+    await call.message.answer(f"✍️ {who} ga javobingizni yozing:\n\nBekor qilish: /cancel")
+    await call.answer()
+
+
+@router.message(Reply.text, TEXT)
+async def reply_send(message: Message, state: FSMContext, bot: Bot):
+    data = await state.get_data()
+    await state.clear()
+    chat_id = data.get("chat_id", "")
+    text = message.text.strip()[:2000]
+    snap = await asyncio.to_thread(CHATS.document(chat_id).get)
+    chat = as_dict(snap) if snap.exists else None
+    center = await get_center(str(chat.get("centerId", ""))) if chat else None
+    if not chat or not center or as_dict(center).get("ownerTgId") != message.from_user.id:
+        return await message.answer("Suhbat topilmadi.")
+
+    def write():
+        batch = db.batch()
+        batch.set(CHATS.document(chat_id).collection("messages").document(), {
+            "from": "center", "text": text, "createdAt": firestore.SERVER_TIMESTAMP, "notified": True,
+        })
+        batch.update(CHATS.document(chat_id), {
+            "lastMessage": text[:200], "lastAt": firestore.SERVER_TIMESTAMP, "unreadUser": firestore.Increment(1),
+        })
+        batch.commit()
+
+    await asyncio.to_thread(write)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[btn("↩️ Yana yozish", "rp", chat_id)]])
+    await message.answer("✅ Javob yuborildi.", reply_markup=kb)
+    await notify_user(bot, chat.get("userTgId"), f"💬 <b>{escape(str(chat.get('centerName', 'Markaz')))}</b>:\n{escape(text)}")
+
+
 # ---------------- Admin: approve / reject ----------------
 @router.callback_query(F.data.startswith(("ap:", "rj:")))
 async def admin_decide(call: CallbackQuery, bot: Bot):
@@ -844,10 +967,10 @@ async def notify_application(bot: Bot, ref):
             f"📚 {escape(str(data.get('group', '')))}\n"
             f"👤 {escape(str(data.get('name', '')))}\n"
             f"📞 {escape(str(data.get('phone', '')))}{user}\n\n"
-            "O‘quvchi bilan tezroq bog‘laning!"
+            "O‘quvchi bilan tezroq bog‘laning va holatini belgilang 👇"
         )
         try:
-            await bot.send_message(c.get("ownerTgId"), text)
+            await bot.send_message(c.get("ownerTgId"), text, reply_markup=app_kb(ref.id))
         except Exception as e:  # noqa: BLE001
             log.warning("Ariza %s egaga yuborilmadi: %s", ref.id, e)
     except Exception:  # noqa: BLE001
@@ -866,9 +989,132 @@ def start_application_watcher(bot: Bot, loop: asyncio.AbstractEventLoop):
     return APPS.where(filter=FieldFilter("notified", "==", False)).on_snapshot(on_snapshot)
 
 
+# ---------------- Telegram tasdiqlash (Mini App anonim login -> tg claim) ----------------
+def _link(doc_ref, init_data: str):
+    user = validate_init_data(init_data, BOT_TOKEN)
+    if not user:
+        doc_ref.update({"status": "error", "initData": firestore.DELETE_FIELD})
+        return
+    try:
+        fb_auth.set_custom_user_claims(doc_ref.id, {"tg": int(user["id"])})
+    except Exception as e:  # noqa: BLE001
+        log.warning("Claim qo‘yilmadi (%s): %s", doc_ref.id, e)
+        doc_ref.update({"status": "error", "initData": firestore.DELETE_FIELD})
+        return
+    doc_ref.update({"status": "ok", "tg": int(user["id"]), "initData": firestore.DELETE_FIELD})
+
+
+def start_link_watcher():
+    def on_snapshot(_docs, changes, _read_time):
+        for ch in changes:
+            if ch.type.name in ("ADDED", "MODIFIED"):
+                d = as_dict(ch.document)
+                if d.get("status") == "pending" and isinstance(d.get("initData"), str):
+                    try:
+                        _link(ch.document.reference, d["initData"])
+                    except Exception:  # noqa: BLE001
+                        log.exception("tgLink %s", ch.document.id)
+
+    return LINKS.where(filter=FieldFilter("status", "==", "pending")).on_snapshot(on_snapshot)
+
+
+# ---------------- Chat: foydalanuvchi xabari -> markaz egasiga ----------------
+@firestore.transactional
+def _claim_msg_txn(transaction, ref):
+    snap = ref.get(transaction=transaction)
+    if not snap.exists or as_dict(snap).get("notified"):
+        return None
+    transaction.update(ref, {"notified": True})
+    return as_dict(snap)
+
+
+async def relay_chat(bot: Bot, chat_ref):
+    try:
+        chat_snap = await asyncio.to_thread(chat_ref.get)
+        chat = as_dict(chat_snap)
+        center = await get_center(str(chat.get("centerId", "")))
+        if not center:
+            return
+        owner = as_dict(center).get("ownerTgId")
+        q = chat_ref.collection("messages").where(filter=FieldFilter("notified", "==", False))
+        msgs = await asyncio.to_thread(lambda: list(q.stream()))
+        for m in sorted(msgs, key=lambda x: str(as_dict(x).get("createdAt"))):
+            data = await asyncio.to_thread(lambda r=m.reference: _claim_msg_txn(db.transaction(), r))
+            if not data or data.get("from") != "user":
+                continue
+            who = escape(str(chat.get("userName") or "Ota-ona"))
+            if chat.get("userUsername"):
+                who += f" (@{escape(str(chat['userUsername']))})"
+            kb = InlineKeyboardMarkup(inline_keyboard=[[btn("↩️ Javob berish", "rp", chat_ref.id)]])
+            try:
+                await bot.send_message(owner, f"💬 <b>{who}</b> → {escape(str(chat.get('centerName', '')))}:\n{escape(str(data.get('text', '')))}", reply_markup=kb)
+            except Exception as e:  # noqa: BLE001
+                log.warning("Chat xabari egaga yuborilmadi: %s", e)
+        await asyncio.to_thread(chat_ref.update, {"unreadCenter": 0})
+    except Exception:  # noqa: BLE001
+        log.exception("Chat %s ni uzatishda xato", chat_ref.id)
+
+
+def start_chat_watcher(bot: Bot, loop: asyncio.AbstractEventLoop):
+    def on_snapshot(_docs, changes, _read_time):
+        for ch in changes:
+            if ch.type.name in ("ADDED", "MODIFIED"):
+                asyncio.run_coroutine_threadsafe(relay_chat(bot, ch.document.reference), loop)
+
+    return CHATS.where(filter=FieldFilter("unreadCenter", ">", 0)).on_snapshot(on_snapshot)
+
+
+# ---------------- Kutish ro'yxati: joy bo'shadi ----------------
+async def notify_waitlist(bot: Bot, cid: str, idx: int, center: dict):
+    try:
+        q = WAITLIST.where(filter=FieldFilter("centerId", "==", cid))
+        docs = await asyncio.to_thread(lambda: list(q.stream()))
+        g = (center.get("groups") or [])[idx]
+        for d in docs:
+            w = as_dict(d)
+            if w.get("groupIndex") != idx or w.get("notified"):
+                continue
+            uid = w.get("userTgId")
+            prefs = as_dict(await asyncio.to_thread(USERS.document(str(uid)).get)) if isinstance(uid, int) else {}
+            if (prefs.get("notify") or {}).get("seats") is not False:
+                await notify_user(
+                    bot, uid,
+                    f"🎉 <b>{escape(str(center.get('name', '')))}</b> — «{escape(str(g.get('subject', '')))}» guruhida joy bo‘shadi!\n"
+                    "Tezroq yoziling — joylar cheklangan.",
+                )
+            await asyncio.to_thread(d.reference.update, {"notified": True})
+    except Exception:  # noqa: BLE001
+        log.exception("Kutish ro‘yxati (%s) xabarlarida xato", cid)
+
+
+# ---------------- Sinov darsi eslatmasi ----------------
+async def remind_trials(bot: Bot):
+    now = datetime.now(timezone.utc)
+    q = APPS.where(filter=FieldFilter("status", "==", "accepted"))
+    for d in await asyncio.to_thread(lambda: list(q.stream())):
+        a = as_dict(d)
+        t = a.get("trialAt")
+        if a.get("trialReminded") or not isinstance(t, datetime) or not now < t <= now + timedelta(hours=24):
+            continue
+        uid = a.get("tgUserId")
+        prefs = as_dict(await asyncio.to_thread(USERS.document(str(uid)).get)) if isinstance(uid, int) else {}
+        if (prefs.get("notify") or {}).get("reminders") is not False:
+            local = t.astimezone(TASHKENT)
+            await notify_user(
+                bot, uid,
+                f"⏰ Eslatma: <b>{escape(str(a.get('centerName', '')))}</b> — sinov darsi "
+                f"{local.strftime('%d.%m')} kuni soat <b>{local.strftime('%H:%M')}</b> da.\n{escape(str(a.get('group', '')))}",
+            )
+        await asyncio.to_thread(d.reference.update, {"trialReminded": True})
+
+
 # ---------------- Weekly reminder ----------------
 async def reminder_loop(bot: Bot):
     while True:
+        try:
+            await remind_trials(bot)
+        except Exception:  # noqa: BLE001
+            log.exception("Sinov darsi eslatmalarida xato")
         try:
             now = datetime.now(timezone.utc)
             q = CENTERS.where(filter=FieldFilter("approved", "==", True))
@@ -915,14 +1161,22 @@ async def main():
         BotCommand(command="cancel", description="Bekor qilish"),
     ])
 
+    me = await bot.get_me()
+    # Web app «Ulashish» va «Markaz qo‘shish» havolalari uchun bot username'i (ochiq ma'lumot)
+    await asyncio.to_thread(db.collection("meta").document("public").set, {"botUsername": me.username}, merge=True)
+
     loop = asyncio.get_running_loop()
     watch = start_application_watcher(bot, loop)
+    links = start_link_watcher()
+    chats = start_chat_watcher(bot, loop)
     reminder = asyncio.create_task(reminder_loop(bot))
     log.info("Bot ishga tushdi. Adminlar: %s", ", ".join(map(str, ADMIN_IDS)) or "yo‘q")
     try:
         await dp.start_polling(bot)
     finally:
         watch.unsubscribe()
+        links.unsubscribe()
+        chats.unsubscribe()
         reminder.cancel()
         await bot.session.close()
 

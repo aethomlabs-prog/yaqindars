@@ -1,15 +1,15 @@
 /* Profil tabi: iOS «Settings» uslubidagi guruhlangan ro‘yxat. */
 import { Baby, Bell, BellRing, ClipboardList, Heart, Info, MapPin, Moon, RotateCcw, Store } from "lucide-react";
-import { BOT_USERNAME } from "../../../config";
 import { Avatar, CountBadge, Segmented, Switch } from "../../components/ios/controls";
 import { Row, Section } from "../../components/ios/Grouped";
 import { Page } from "../../components/ios/Page";
 import { openTelegramLink, tgUser } from "../../lib/telegram";
-import { displayName, IS_DEMO, useApp, useApplications, useProfile, useSettings, type ThemePref } from "../../store/app";
+import { displayName, IS_DEMO, useApp, useApplications, useProfile, useSettings, type ThemePref, useBotUsername } from "../../store/app";
 import { useNav } from "../../store/nav";
 
 export function ProfileScreen() {
   const push = useNav((s) => s.push);
+  const BOT_USERNAME = useBotUsername();
   const children = useProfile((s) => s.children);
   const favorites = useProfile((s) => s.favorites);
   const addresses = useProfile((s) => s.addresses);

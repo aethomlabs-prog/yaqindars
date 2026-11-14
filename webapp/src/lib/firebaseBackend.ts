@@ -1,6 +1,6 @@
 /* Firebase backend. Bu modul va Firebase SDK faqat FIREBASE_CONFIG bo‘lsa (lazy) yuklanadi. */
 import { initializeApp } from "firebase/app";
-import { getAuth, signInWithCustomToken } from "firebase/auth";
+import { getAuth, signInAnonymously, type Auth } from "firebase/auth";
 import {
   addDoc,
   collection,
@@ -19,6 +19,7 @@ import {
   where,
   writeBatch,
   type DocumentData,
+  type Firestore,
   type Timestamp
 } from "firebase/firestore";
 import { FIREBASE_CONFIG, FUNCTIONS_URL } from "../../config";
@@ -88,24 +89,46 @@ function toApp(id: string, d: DocumentData): Application {
   };
 }
 
-async function authenticate(): Promise<{ token: string } | null> {
-  if (!FUNCTIONS_URL || !initData) return null;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 7000);
+/**
+ * Telegram orqali tasdiqlash (server/Cloud Functions shart emas):
+ * Mini App anonim kiradi → initData'ni tgLinks/{uid} ga yozadi → bot imzoni tekshirib "tg" claim qo'yadi.
+ * Claim anonim akkauntda saqlanadi — keyingi ochilishlarda kutish yo'q.
+ */
+async function linkTelegram(auth: Auth, db: Firestore): Promise<number | null> {
+  if (!initData || !tgUser) return null;
   try {
-    const r = await fetch(`${FUNCTIONS_URL.replace(/\/$/, "")}/auth`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ initData }),
-      signal: ctrl.signal
+    await auth.authStateReady();
+    const user = auth.currentUser ?? (await signInAnonymously(auth)).user;
+    const cached = await user.getIdTokenResult();
+    if (cached.claims.tg === tgUser.id) return tgUser.id;
+
+    const ref = doc(db, "tgLinks", user.uid);
+    await setDoc(ref, { initData, status: "pending", createdAt: serverTimestamp() });
+    const ok = await new Promise<boolean>((resolve) => {
+      let done = false;
+      const finish = (v: boolean) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        unsub();
+        resolve(v);
+      };
+      const timer = setTimeout(() => finish(false), 10000); // bot o'chiq bo'lsa — mehmon rejimi
+      const unsub = onSnapshot(
+        ref,
+        (snap) => {
+          const st = snap.data()?.status;
+          if (st === "ok" || st === "error") finish(st === "ok");
+        },
+        () => finish(false)
+      );
     });
-    if (!r.ok) throw new Error(`auth ${r.status}`);
-    return await r.json();
+    if (!ok) return null;
+    const fresh = await user.getIdTokenResult(true);
+    return fresh.claims.tg === tgUser.id ? tgUser.id : null;
   } catch (e) {
-    console.warn("Telegram auth ishlamadi:", e);
+    console.warn("Telegram tasdiqlash ishlamadi:", e);
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -114,16 +137,12 @@ export async function createFirebaseBackend(): Promise<Backend> {
   const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
   const auth = getAuth(app);
 
-  let uid: string | null = null;
-  const res = await authenticate();
-  if (res?.token) {
-    try {
-      const cred = await signInWithCustomToken(auth, res.token);
-      uid = cred.user.uid;
-    } catch (e) {
-      console.warn("signInWithCustomToken:", e);
-    }
-  }
+  const [tg, meta] = await Promise.all([
+    linkTelegram(auth, db),
+    getDoc(doc(db, "meta", "public")).then((d) => d.data() ?? null).catch(() => null)
+  ]);
+  // Firestore yo'llari (users/{id}, chats/{id}_...) Telegram ID bo'yicha
+  const uid: string | null = tg ? String(tg) : null;
   const authed = !!uid;
   const tgId = uid ? Number(uid) : null;
   let cachedChildren: Child[] = [];
@@ -137,6 +156,7 @@ export async function createFirebaseBackend(): Promise<Backend> {
   const backend: Backend = {
     mode: "firebase",
     authed,
+    botUsername: typeof meta?.botUsername === "string" ? meta.botUsername : undefined,
     centerChatEnabled: authed,
     aiEnabled: authed && !!FUNCTIONS_URL,
 

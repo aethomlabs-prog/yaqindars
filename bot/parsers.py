@@ -190,3 +190,59 @@ def parse_registration(raw: str) -> dict:
         "groups": groups,
         "teachers": teachers,
     }
+
+
+# ---------------- Telegram Mini App initData tekshiruvi ----------------
+import hashlib  # noqa: E402
+import hmac  # noqa: E402
+import time as _time  # noqa: E402
+from datetime import datetime as _dt, timedelta as _td, timezone as _tz  # noqa: E402
+from urllib.parse import parse_qsl as _parse_qsl  # noqa: E402
+
+
+def validate_init_data(init_data: str, bot_token: str, max_age: int = 86400, now: float | None = None):
+    """Telegram imzosini tekshiradi (core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app).
+    To'g'ri bo'lsa user dict (id, first_name, ...), aks holda None."""
+    if not init_data or len(init_data) > 4096:
+        return None
+    try:
+        pairs = dict(_parse_qsl(init_data, keep_blank_values=True, strict_parsing=True))
+    except ValueError:
+        return None
+    received = pairs.pop("hash", "")
+    if not received:
+        return None
+    check = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
+    secret = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+    calc = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(calc, received):
+        return None
+    try:
+        auth_date = int(pairs.get("auth_date", "0"))
+        user = json.loads(pairs.get("user", "null"))
+    except ValueError:
+        return None
+    if (now if now is not None else _time.time()) - auth_date > max_age:
+        return None
+    if not isinstance(user, dict) or not isinstance(user.get("id"), int):
+        return None
+    return user
+
+
+# ---------------- Sinov darsi vaqti ----------------
+TASHKENT = _tz(_td(hours=5))
+_WEEKDAY = {d: i for i, d in enumerate(DAY_ORDER)}  # Du=0 ... Ya=6
+
+
+def next_lesson(days: list, time_range: str, now: _dt | None = None):
+    """Guruhning keyingi dars boshlanishi (Toshkent vaqti) — ertadan boshlab 8 kun ichida. Topilmasa None."""
+    m = re.match(r"(\d{1,2}):(\d{2})", time_range or "")
+    wanted = {_WEEKDAY[d] for d in days or [] if d in _WEEKDAY}
+    if not m or not wanted:
+        return None
+    now = (now or _dt.now(TASHKENT)).astimezone(TASHKENT)
+    for i in range(1, 9):
+        day = now + _td(days=i)
+        if day.weekday() in wanted:
+            return day.replace(hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0)
+    return None

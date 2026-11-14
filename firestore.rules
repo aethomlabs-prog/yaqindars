@@ -2,6 +2,21 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Telegram orqali tasdiqlangan foydalanuvchi: Mini App anonim kiradi, bot initData imzosini
+    // tekshirib, unga "tg" (Telegram ID) claim'ini qo'yadi. Shu claim — yagona ishonchli ID.
+    function tg() {
+      return request.auth != null && ('tg' in request.auth.token) && request.auth.token.tg is int ? request.auth.token.tg : null;
+    }
+    function isTg(id) {
+      return tg() != null && tg() == id;
+    }
+
+    // Ochiq sozlamalar (bot username) — faqat bot yozadi.
+    match /meta/public {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Markazlar: hamma faqat TASDIQLANGANLARINI o'qiy oladi.
     // Mini App so'rovi where("approved", "==", true) bilan bo'lishi shart, aks holda qoida rad etadi.
     // Yozish faqat bot orqali (Admin SDK qoidalarni chetlab o'tadi).
@@ -10,7 +25,27 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Arizalar: Mini App faqat YANGI ariza yarata oladi. O'qish/o'zgartirish/o'chirish — faqat bot.
+    // Telegram tasdiqlash so'rovi: anonim foydalanuvchi faqat o'z hujjatini "pending" holatida yozadi.
+    match /tgLinks/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['initData', 'status', 'createdAt'])
+        && request.resource.data.initData is string && request.resource.data.initData.size() <= 4096
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+      allow delete: if false;
+    }
+
+    // Profil: faqat egasi (hujjat ID = Telegram ID).
+    match /users/{tgId} {
+      allow read, write: if tg() != null && string(tg()) == tgId;
+      match /{sub}/{docId} {
+        allow read, write: if tg() != null && string(tg()) == tgId && sub in ['children', 'favorites'];
+      }
+    }
+
+    // Arizalar: Mini App yangi ariza yaratadi; tasdiqlangan foydalanuvchi faqat O'Z arizalarini o'qiydi.
+    // Holatni (seen/accepted/rejected) faqat bot o'zgartiradi.
     match /applications/{id} {
       function validApplication(d) {
         return d.keys().hasOnly(['centerId', 'centerName', 'group', 'groupIndex', 'name', 'phone',
@@ -24,7 +59,8 @@ service cloud.firestore {
           && (!('groupIndex' in d) || (d.groupIndex is int && d.groupIndex >= 0 && d.groupIndex < 20))
           && (!('childId' in d) || d.childId == null || (d.childId is string && d.childId.size() <= 64))
           && (!('comment' in d) || (d.comment is string && d.comment.size() <= 300))
-          && (!('tgUserId' in d) || d.tgUserId == null || d.tgUserId is int)
+          // tgUserId — faqat o'ziniki (boshqa odam nomidan ariza yuborib bo'lmaydi)
+          && (!('tgUserId' in d) || d.tgUserId == null || isTg(d.tgUserId))
           && (!('tgUsername' in d) || d.tgUsername == null
               || (d.tgUsername is string && d.tgUsername.size() <= 64))
           && d.notified == false
@@ -35,7 +71,54 @@ service cloud.firestore {
       allow create: if validApplication(request.resource.data)
         // ariza faqat mavjud va tasdiqlangan markazga
         && get(/databases/$(database)/documents/centers/$(request.resource.data.centerId)).data.approved == true;
+      allow read: if isTg(resource.data.tgUserId);
+      allow update, delete: if false;
+    }
+
+    // «Joy bo'shasa xabar ber»
+    match /waitlist/{id} {
+      allow create: if isTg(request.resource.data.userTgId)
+        && request.resource.data.keys().hasOnly(['centerId', 'groupIndex', 'userTgId', 'createdAt', 'notified'])
+        && request.resource.data.centerId is string && request.resource.data.centerId.size() <= 64
+        && request.resource.data.groupIndex is int && request.resource.data.groupIndex >= 0 && request.resource.data.groupIndex < 20
+        && request.resource.data.notified == false
+        && request.resource.data.createdAt == request.time;
       allow read, update, delete: if false;
+    }
+
+    // Markaz bilan chat. Hujjat ID: "<tgId>_<centerId>". Markaz javoblarini bot yozadi.
+    match /chats/{chatId} {
+      allow read: if resource == null || isTg(resource.data.userTgId);
+      allow create: if isTg(request.resource.data.userTgId)
+        && chatId == string(tg()) + '_' + request.resource.data.centerId
+        && request.resource.data.keys().hasOnly(['type', 'centerId', 'centerName', 'userTgId', 'userName', 'userUsername',
+                                                 'lastMessage', 'lastAt', 'unreadUser', 'unreadCenter'])
+        && request.resource.data.type == 'center'
+        && request.resource.data.centerName is string && request.resource.data.centerName.size() <= 100
+        && request.resource.data.lastMessage == ''
+        && request.resource.data.unreadUser == 0 && request.resource.data.unreadCenter == 0
+        && get(/databases/$(database)/documents/centers/$(request.resource.data.centerId)).data.approved == true;
+      // Foydalanuvchi: xabar yuborganda (lastMessage, lastAt, unreadCenter+1) yoki o'qiganda (unreadUser=0)
+      allow update: if isTg(resource.data.userTgId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastAt', 'unreadCenter', 'unreadUser'])
+        && request.resource.data.unreadUser in [0, resource.data.unreadUser]
+        && request.resource.data.unreadCenter in [resource.data.unreadCenter, resource.data.unreadCenter + 1]
+        && request.resource.data.lastMessage is string && request.resource.data.lastMessage.size() <= 200;
+      allow delete: if isTg(resource.data.userTgId);
+
+      match /messages/{msgId} {
+        function chat() {
+          return get(/databases/$(database)/documents/chats/$(chatId)).data;
+        }
+        allow read: if isTg(chat().userTgId);
+        allow create: if isTg(chat().userTgId)
+          && request.resource.data.keys().hasOnly(['from', 'text', 'createdAt', 'notified'])
+          && request.resource.data.from == 'user'
+          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000
+          && request.resource.data.notified == false
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
     }
   }
 }

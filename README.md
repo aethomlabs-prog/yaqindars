@@ -208,3 +208,26 @@ Kunlar: `Du Se Ch Pa Ju Sh Ya`. Fanlar: Ingliz tili, Matematika, IT, Rus tili, K
   ko‘paysa MapTiler / Stadia / Yandex plitkalariga o‘tish (`app.js` dagi `L.tileLayer` manzili).
 - **Android ilova:** Flutter’da, xuddi shu Firestore bazasi bilan.
 - Arizalar holatini (`status`: new → called → enrolled) botda boshqarish, markaz uchun oylik hisobot.
+
+---
+
+## Telegram orqali kirish, chat va bildirishnomalar (server shart emas)
+
+Cloud Functions (pullik Blaze tarif) o‘rniga **bot o‘zi** foydalanuvchini tasdiqlaydi:
+
+1. Mini App Firebase’ga **anonim** kiradi va Telegram `initData`’sini `tgLinks/{uid}` ga yozadi.
+2. Bot imzoni bot tokeni bilan tekshiradi (`parsers.validate_init_data`) va akkauntga `tg` (Telegram ID) claim’ini qo‘yadi.
+3. `firestore.rules` shu claim bo‘yicha har kimga faqat o‘z profili, arizalari va chatlarini ochadi.
+
+Shu orqali ishlaydi: markaz bilan chat (javoblar botda «↩️ Javob berish» tugmasi bilan), ariza holati
+(markaz egasi botda «👁 Ko‘rdim / ✅ Qabul / ❌ Rad» bosadi, ota-onaga xabar boradi, sinov darsi sanasi
+avtomatik hisoblanadi), «Joy bo‘shasa xabar ber», sinov darsidan 24 soat oldin eslatma, profil bulutda.
+
+**Bir martalik sozlash:**
+1. Firebase Console → **Authentication → Sign-in method → Anonymous → Enable**.
+2. Firebase Console → **Firestore → Rules** → `firestore.rules` matnini qo‘yib **Publish**.
+3. Botni qayta ishga tushiring. Bot ishga tushganda o‘z username’ini `meta/public` ga yozadi —
+   web app «Ulashish» havolalari uchun shuni ishlatadi.
+
+Bot o‘chiq bo‘lsa, Mini App 10 soniyadan keyin mehmon rejimida ochiladi (xarita va arizalar ishlaydi).
+AI yordamchi hozircha qoidaga asoslangan qidiruv bilan ishlaydi (LLM uchun server kerak).

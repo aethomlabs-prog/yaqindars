@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { FIREBASE_CONFIG, FORCE_DEMO } from "../../config";
+import { BOT_USERNAME, FIREBASE_CONFIG, FORCE_DEMO } from "../../config";
 import type { Backend, ProfileDoc } from "../lib/backend";
 import { getCurrentPosition, RISHTON, watchPosition } from "../lib/geo";
 import { haptic, tgUser } from "../lib/telegram";
@@ -287,6 +287,12 @@ export function useOrigin(): { pos: LatLng; label: string; source: "address" | "
 export const displayName = () => tgUser?.first_name || (IS_DEMO ? "Mehmon" : "Mehmon");
 
 export const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+
+/** Bot username: config.ts → bo‘lmasa bot bazaga yozgani (meta/public) */
+export function useBotUsername(): string {
+  const remote = useApp((s) => s.backend?.botUsername);
+  return BOT_USERNAME || remote || "";
+}
 
 export function useCenter(id: string | null | undefined): Center | undefined {
   return useApp((s) => s.centers.find((c) => c.id === id));
