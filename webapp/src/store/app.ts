@@ -3,6 +3,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { BOT_USERNAME, FIREBASE_CONFIG, FORCE_DEMO, LANG_SWITCH_ENABLED } from "../../config";
 import type { Backend, ProfileDoc } from "../lib/backend";
 import { getCurrentPosition, RISHTON, watchPosition } from "../lib/geo";
+import { setLogSender } from "../lib/errorLog";
 import { haptic, tgUser } from "../lib/telegram";
 import type { Address, Application, Center, Chat, Child, LatLng, Message } from "../lib/types";
 
@@ -222,6 +223,7 @@ export const useApp = create<AppState>((set, get) => ({
       return;
     }
     set({ backend, aiEnabled: backend.aiEnabled });
+    if (backend.logError) setLogSender((e) => backend.logError!(e));
     get().loadCenters();
 
     backend.watchChats((chats) => set({ chats }));

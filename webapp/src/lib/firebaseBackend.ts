@@ -381,6 +381,10 @@ export async function createFirebaseBackend(): Promise<Backend> {
       await deleteDoc(doc(db, "chats", chatId));
     },
 
+    async logError(e) {
+      await addDoc(collection(db, "logs"), { ...e, tgUserId: tgId, createdAt: serverTimestamp() });
+    },
+
     async deleteMyData() {
       if (!uid) return "local";
       const ref = doc(db, "deleteRequests", uid);

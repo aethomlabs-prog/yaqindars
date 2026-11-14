@@ -9,6 +9,11 @@
 import asyncio
 import json
 import logging
+import logging.handlers
+import platform
+import queue
+import time
+import traceback
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -64,6 +69,7 @@ from aiogram.fsm.context import FSMContext  # noqa: E402
 from aiogram.fsm.state import State, StatesGroup  # noqa: E402
 from aiogram.types import (  # noqa: E402
     BotCommand,
+    ErrorEvent,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -432,7 +438,7 @@ async def help_cmd(message: Message):
         f"🔒 <a href=\"{PRIVACY_URL}\">Maxfiylik siyosati</a>"
     )
     if is_admin(message.from_user.id):
-        text += "\n\nAdmin:\n/vip MARKAZ_ID — VIP ni yoqish/o‘chirish\n/stat — statistika"
+        text += "\n\nAdmin:\n/vip MARKAZ_ID — VIP ni yoqish/o‘chirish\n/stat — statistika\n/logs — oxirgi xatolar"
     await message.answer(text, disable_web_page_preview=True)
 
 
@@ -1084,6 +1090,76 @@ async def delete_confirm(call: CallbackQuery):
     await call.message.edit_text(deleted_text(counts))
 
 
+# ---------------- Xatolarni Firestore'ga yozish (logs, faqat admin o'qiydi) ----------------
+class FirestoreLogHandler(logging.Handler):
+    """ERROR va undan yuqori yozuvlarni logs kolleksiyasiga yozadi. Soatiga ko'pi bilan 30 ta."""
+
+    def __init__(self):
+        super().__init__(level=logging.ERROR)
+        self._window = time.time()
+        self._count = 0
+
+    def emit(self, record: logging.LogRecord):
+        now = time.time()
+        if now - self._window > 3600:
+            self._window, self._count = now, 0
+        if self._count >= 30:
+            return
+        self._count += 1
+        try:
+            stack = "".join(traceback.format_exception(*record.exc_info)) if record.exc_info else ""
+            db.collection("logs").add({
+                "source": "bot",
+                "level": record.levelname.lower(),
+                "message": record.getMessage()[:1000],
+                "stack": stack[-2000:],
+                "screen": record.name[:100],
+                "device": f"{platform.node()} · Python {platform.python_version()}"[:300],
+                "url": "",
+                "createdAt": firestore.SERVER_TIMESTAMP,
+            })
+        except Exception:  # noqa: BLE001
+            pass  # log yozilmasa — jim (cheksiz siklga tushmaslik uchun)
+
+
+def install_firestore_logging():
+    """Firestore'ga yozish alohida oqimda — bot sekinlashmaydi."""
+    q: queue.Queue = queue.Queue(-1)
+    logging.getLogger().addHandler(logging.handlers.QueueHandler(q))
+    listener = logging.handlers.QueueListener(q, FirestoreLogHandler(), respect_handler_level=True)
+    listener.start()
+    return listener
+
+
+@router.errors()
+async def on_error(event: ErrorEvent):
+    upd = event.update
+    who = ""
+    if upd.message and upd.message.from_user:
+        who = f" (user {upd.message.from_user.id}, matn: {(upd.message.text or '')[:60]!r})"
+    elif upd.callback_query:
+        who = f" (user {upd.callback_query.from_user.id}, tugma: {upd.callback_query.data!r})"
+    log.error("Update %s ni qayta ishlashda xato%s", upd.update_id, who, exc_info=event.exception)
+    return True
+
+
+@router.message(Command("logs"))
+async def logs_cmd(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    q = db.collection("logs").order_by("createdAt", direction=firestore.Query.DESCENDING).limit(10)
+    docs = await asyncio.to_thread(lambda: list(q.stream()))
+    if not docs:
+        return await message.answer("✅ Xato yozuvlari yo‘q.")
+    lines = []
+    for d in docs:
+        x = as_dict(d)
+        t = x.get("createdAt")
+        when = t.astimezone(TASHKENT).strftime("%d.%m %H:%M") if isinstance(t, datetime) else "?"
+        lines.append(f"• <b>{escape(str(x.get('source')))}</b> {when} · {escape(str(x.get('screen', '')))}\n  {escape(str(x.get('message', ''))[:200])}")
+    await message.answer("🧾 <b>Oxirgi xatolar</b>\n\n" + "\n".join(lines))
+
+
 # ---------------- Admin: approve / reject ----------------
 @router.callback_query(F.data.startswith(("ap:", "rj:")))
 async def admin_decide(call: CallbackQuery, bot: Bot):
@@ -1201,7 +1277,10 @@ def _link(doc_ref, init_data: str):
         doc_ref.update({"status": "error", "initData": firestore.DELETE_FIELD})
         return
     try:
-        fb_auth.set_custom_user_claims(doc_ref.id, {"tg": int(user["id"])})
+        claims = {"tg": int(user["id"])}
+        if int(user["id"]) in ADMIN_IDS:
+            claims["admin"] = True  # firestore.rules: logs faqat admin o'qiydi
+        fb_auth.set_custom_user_claims(doc_ref.id, claims)
     except Exception as e:  # noqa: BLE001
         log.warning("Claim qo‘yilmadi (%s): %s", doc_ref.id, e)
         doc_ref.update({"status": "error", "initData": firestore.DELETE_FIELD})
@@ -1463,6 +1542,7 @@ async def main():
         force=True,
     )
     logging.getLogger("aiogram.event").setLevel(logging.WARNING)
+    log_listener = install_firestore_logging()
     bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
     dp.include_router(router)
@@ -1501,6 +1581,7 @@ async def main():
         deletes.unsubscribe()
         reminder.cancel()
         cleanup.cancel()
+        log_listener.stop()
         await bot.session.close()
 
 

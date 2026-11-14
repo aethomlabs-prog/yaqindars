@@ -70,6 +70,8 @@ export interface Backend {
   /** Markaz «yozmoqda…» (faqat DEMO simulyatsiya) */
   onTyping?(cb: (chatId: string, typing: boolean) => void): Unsub;
 
+  /** JS xatosini `logs` kolleksiyasiga yozish (faqat Firebase rejimida) */
+  logError?(e: import("./errorLog").LogEntry): Promise<void>;
   /** Barcha shaxsiy ma’lumotlarni o‘chirish: "done" — serverda o‘chirildi; "local" — faqat qurilmada edi */
   deleteMyData(): Promise<"done" | "local" | "pending">;
 

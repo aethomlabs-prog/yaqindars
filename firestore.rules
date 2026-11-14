@@ -45,6 +45,22 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Texnik xato yozuvlari: ilova yozadi (o'lchami cheklangan), faqat admin o'qiydi.
+    // "admin" claim'ini bot ADMIN_IDS dagilarga Telegram tasdiqlashda qo'yadi.
+    match /logs/{id} {
+      allow read: if request.auth != null && request.auth.token.get('admin', false) == true;
+      allow create: if request.resource.data.keys().hasOnly(['source', 'level', 'message', 'stack', 'screen', 'device', 'url', 'tgUserId', 'createdAt'])
+        && request.resource.data.source == 'web' && request.resource.data.level == 'error'
+        && request.resource.data.message is string && request.resource.data.message.size() <= 1000
+        && request.resource.data.stack is string && request.resource.data.stack.size() <= 2000
+        && request.resource.data.screen is string && request.resource.data.screen.size() <= 100
+        && request.resource.data.device is string && request.resource.data.device.size() <= 300
+        && request.resource.data.url is string && request.resource.data.url.size() <= 200
+        && (request.resource.data.tgUserId == null || isTg(request.resource.data.tgUserId))
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
     // «Ma'lumotlarimni o'chirish»: foydalanuvchi so'rov qoldiradi, o'chirishni bot (Admin SDK) bajaradi.
     match /deleteRequests/{tgId} {
       allow read: if tg() != null && string(tg()) == tgId;
