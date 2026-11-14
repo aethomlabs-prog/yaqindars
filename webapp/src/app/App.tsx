@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type Reac
 import { TabBar } from "../components/ios/TabBar";
 import { IslandBridge } from "../components/IslandBridge";
 import { IslandProvider, Onboarding, shouldShowOnboarding, SkeletonList, Splash } from "../components/motion";
-import { InstallPrompt } from "../components/InstallPrompt";
+import { INSTALL_LANDING, InstallPrompt } from "../components/InstallPrompt";
 import { OfflineBanner } from "../components/OfflineBanner";
 import { DEBUG, DebugPanel } from "../components/DebugPanel";
 import { applyChromeColors, onThemeChanged, startParam, telegramColorScheme, useBackHandler } from "../lib/telegram";
@@ -26,6 +26,7 @@ const MapScreen = lazy(() => import("../screens/map/MapScreen"));
 // Markazlar uchun ro‘yxatdan o‘tish (bot: /markaz → ?mode=register)
 const RegisterApp = lazy(() => import("../register/RegisterApp"));
 const OwnerApp = lazy(() => import("../owner/OwnerApp"));
+const InstallLanding = lazy(() => import("../components/InstallLanding"));
 const MODE = new URLSearchParams(location.search).get("mode"); // register | owner | null
 
 function renderRoute(r: Route): ReactNode {
@@ -111,7 +112,17 @@ function useTheme() {
 export function App() {
   return (
     <IslandProvider>
-      {MODE === "register" ? <RegisterRoot /> : MODE === "owner" ? <OwnerRoot /> : <MainApp />}
+      {INSTALL_LANDING ? (
+        <Suspense fallback={<Loading />}>
+          <InstallLanding />
+        </Suspense>
+      ) : MODE === "register" ? (
+        <RegisterRoot />
+      ) : MODE === "owner" ? (
+        <OwnerRoot />
+      ) : (
+        <MainApp />
+      )}
       <IslandBridge />
       {DEBUG && <DebugPanel />}
     </IslandProvider>

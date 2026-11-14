@@ -129,8 +129,9 @@ export const haptic = {
 };
 
 /* ---------- Havolalar ---------- */
-export function openLink(url: string) {
-  if (tg?.openLink) tg.openLink(url);
+/** Tashqi havola. tryBrowser — Telegram ichki brauzeri o‘rniga shu brauzerda ochishni so‘raydi (Telegram qo‘llasa). */
+export function openLink(url: string, opts?: { tryBrowser?: "chrome" | "safari" }) {
+  if (tg?.openLink) tg.openLink(url, opts?.tryBrowser ? { try_browser: opts.tryBrowser, try_instant_view: false } : undefined);
   else window.open(url, "_blank", "noopener");
 }
 export function openTelegramLink(url: string) {

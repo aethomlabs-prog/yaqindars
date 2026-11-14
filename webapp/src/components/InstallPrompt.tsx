@@ -62,6 +62,16 @@ if (typeof window !== "undefined") {
   window.addEventListener("appinstalled", () => setFlag(KEY));
 }
 
+/* O‘rnatish sahifasi (InstallLanding) uchun */
+export const getInstallPrompt = () => deferred;
+export const markInstalled = () => setFlag(KEY);
+export function onInstallPromptReady(fn: () => void) {
+  bipListeners.add(fn);
+  return () => void bipListeners.delete(fn);
+}
+/** ?install=1 brauzerda — alohida o‘rnatish sahifasi ko‘rsatiladi */
+export const INSTALL_LANDING = FORCE && !inTelegram;
+
 type Mode = "telegram" | "pwa" | "ios";
 
 export function InstallPrompt() {
@@ -71,7 +81,7 @@ export function InstallPrompt() {
   const started = useRef(false);
 
   useEffect(() => {
-    if (started.current || isStandalone()) return;
+    if (started.current || isStandalone() || INSTALL_LANDING) return;
     started.current = true;
     const decide = (): Mode | null => {
       if (inTelegram) return flag(ASKED_TG) && !FORCE ? null : "telegram";
@@ -107,7 +117,8 @@ export function InstallPrompt() {
     haptic.light();
     if (mode === "telegram") {
       setFlag(ASKED_TG);
-      openLink(installUrl()); // tashqi brauzerda — o‘sha yerda haqiqiy ilova sifatida o‘rnatiladi
+      // Telegram’ning ichki brauzerida o‘rnatib bo‘lmaydi — Chrome/Safari’ning o‘zini so‘raymiz
+      openLink(installUrl(), { tryBrowser: /iphone|ipad|ipod/i.test(navigator.userAgent) ? "safari" : "chrome" });
       setOpen(false);
     } else if (mode === "pwa" && deferred) {
       await deferred.prompt();
