@@ -10,6 +10,10 @@ import {
   getDocs,
   increment,
   initializeFirestore,
+  getDocsFromCache,
+  getDocsFromServer,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   onSnapshot,
   orderBy,
   query,
@@ -139,9 +143,42 @@ async function linkTelegram(auth: Auth, db: Firestore): Promise<LinkResult> {
   }
 }
 
-export async function createFirebaseBackend(): Promise<Backend> {
+/* Bitta Firebase ilovasi va Firestore — markazlarni Telegram tasdiqlashini kutmasdan yuklash uchun */
+let _db: { app: ReturnType<typeof initializeApp>; db: Firestore } | null = null;
+function getDb() {
+  if (_db) return _db;
   const app = initializeApp(FIREBASE_CONFIG!);
-  const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
+  let db: Firestore;
+  try {
+    // Telefondagi kesh (IndexedDB): keyingi ochilishlarda markazlar darhol, internetsiz ham
+    db = initializeFirestore(app, { ignoreUndefinedProperties: true, localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  } catch {
+    db = initializeFirestore(app, { ignoreUndefinedProperties: true });
+  }
+  _db = { app, db };
+  return _db;
+}
+
+const centersQuery = (db: Firestore) => query(collection(db, "centers"), where("approved", "==", true));
+const toCenters = (docs: { id: string; data: () => DocumentData }[]) =>
+  docs.map((d) => toCenter(d.id, d.data())).filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+
+/** Markazlar: avval telefondagi keshdan (bir zumda), keyin serverdan. Telegram tasdiqlashini kutmaydi. */
+export async function prefetchCenters(cb: (centers: Center[], fromCache: boolean) => void): Promise<void> {
+  const { db } = getDb();
+  const q = centersQuery(db);
+  try {
+    const cached = await getDocsFromCache(q);
+    if (!cached.empty) cb(toCenters(cached.docs), true);
+  } catch {
+    /* kesh hali yo‘q */
+  }
+  const fresh = await getDocsFromServer(q);
+  cb(toCenters(fresh.docs), false);
+}
+
+export async function createFirebaseBackend(): Promise<Backend> {
+  const { app, db } = getDb();
   const auth = getAuth(app);
 
   const [link, meta] = await Promise.all([
@@ -211,8 +248,8 @@ export async function createFirebaseBackend(): Promise<Backend> {
     aiEnabled: authed && !!FUNCTIONS_URL,
 
     async loadCenters() {
-      const snap = await getDocs(query(collection(db, "centers"), where("approved", "==", true)));
-      return snap.docs.map((d) => toCenter(d.id, d.data())).filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+      const snap = await getDocs(centersQuery(db));
+      return toCenters(snap.docs);
     },
     async loadReviews() {
       return []; // Sharhlar — keyingi bosqich (README)

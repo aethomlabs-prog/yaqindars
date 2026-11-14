@@ -217,8 +217,16 @@ export const useApp = create<AppState>((set, get) => ({
         const { createDemoBackend } = await import("../demo/demoBackend");
         backend = createDemoBackend();
       } else {
-        const { createFirebaseBackend } = await import("../lib/firebaseBackend");
-        backend = await createFirebaseBackend();
+        const mod = await import("../lib/firebaseBackend");
+        // Markazlar Telegram tasdiqlashi bilan PARALLEL: keshdan darhol, keyin serverdan
+        set({ centersStatus: "loading" });
+        mod
+          .prefetchCenters((centers) => set({ centers, centersStatus: "ready" }))
+          .catch((e) => {
+            console.warn("markazlar:", e);
+            if (!get().centers.length) set({ centersStatus: "error" });
+          });
+        backend = await mod.createFirebaseBackend();
       }
     } catch (e) {
       console.error(e);
@@ -227,7 +235,7 @@ export const useApp = create<AppState>((set, get) => ({
     }
     set({ backend, aiEnabled: backend.aiEnabled });
     if (backend.logError) setLogSender((e) => backend.logError!(e));
-    get().loadCenters();
+    if (backend.mode === "demo") get().loadCenters(); // Firebase'da prefetchCenters allaqachon yuklayapti
 
     backend.watchChats((chats) => set({ chats }));
     backend.watchApplications((apps) => {

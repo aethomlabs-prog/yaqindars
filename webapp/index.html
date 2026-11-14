@@ -13,8 +13,10 @@
     <meta name="apple-mobile-web-app-title" content="YaqinDars" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
-    <script src="https://telegram.org/js/telegram-web-app.js?57"></script>
+    <!-- Shrift sahifani kutdirmaydi: yuklanguncha tizim shrifti -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
+    <!-- Telegram SDK o‘z saytimizdan (telegram.org dan 5–10 s ketardi va sahifani to‘xtatib turardi) -->
+    <script src="./telegram-web-app.js" defer></script>
     <script>
       // Mavzuni birinchi kadrdan oldin qo‘yamiz (oq «miltillash» bo‘lmasin)
       (function () {
@@ -29,6 +31,8 @@
     </script>
   </head>
   <body>
+    <!-- Birinchi kadr: animatsiyali loading bilan bir xil ko‘k fon (oq/bo‘sh ekran va «qotish» bo‘lmasin) -->
+    <div id="boot" style="position: fixed; inset: 0; z-index: 9998; background: #1e6fd9"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

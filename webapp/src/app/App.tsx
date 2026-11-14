@@ -5,6 +5,7 @@ import { IslandProvider, Onboarding, shouldShowOnboarding, SkeletonList, Splash 
 import { INSTALL_LANDING, InstallPrompt } from "../components/InstallPrompt";
 import { OfflineBanner } from "../components/OfflineBanner";
 import { DEBUG, DebugPanel } from "../components/DebugPanel";
+import { NetworkModal } from "../components/NetworkModal";
 import { applyChromeColors, onThemeChanged, startParam, telegramColorScheme, useBackHandler } from "../lib/telegram";
 import { useApp, useProfile, useSettings } from "../store/app";
 import { useNav, type Route, type StackEntry, type Tab } from "../store/nav";
@@ -110,6 +111,10 @@ function useTheme() {
 }
 
 export function App() {
+  // index.html dagi ko‘k «boot» qatlami: React (va animatsiyali Splash) chizilishi bilan olib tashlanadi
+  useLayoutEffect(() => {
+    document.getElementById("boot")?.remove();
+  }, []);
   return (
     <IslandProvider>
       {INSTALL_LANDING ? (
@@ -124,6 +129,7 @@ export function App() {
         <MainApp />
       )}
       <IslandBridge />
+      <NetworkModal />
       {DEBUG && <DebugPanel />}
     </IslandProvider>
   );
@@ -133,7 +139,7 @@ export function App() {
 function OwnerRoot() {
   useTheme();
   const boot = useApp((s) => s.boot);
-  const authDone = useApp((s) => !!s.backend || !!s.bootError);
+  const authDone = useApp((s) => !!s.backend || !!s.bootError || s.centersStatus === "ready");
   const splashReady = useSplashReady(authDone);
   useEffect(() => {
     boot();
@@ -235,7 +241,7 @@ function MainApp() {
   const boot = useApp((s) => s.boot);
   const bootError = useApp((s) => s.bootError);
   const centersReady = useApp((s) => s.centersStatus === "ready");
-  const authDone = useApp((s) => !!s.backend || !!s.bootError);
+  const authDone = useApp((s) => !!s.backend || !!s.bootError || s.centersStatus === "ready");
   const splashReady = useSplashReady(authDone);
   const [onboarding, setOnboarding] = useState(shouldShowOnboarding);
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set(["home"]));

@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
 import { installErrorLog } from "./lib/errorLog";
-import { inTelegram, initTelegram } from "./lib/telegram";
+import { initTelegram } from "./lib/telegram";
 import { useNav } from "./store/nav";
 import "./index.css";
 
@@ -17,8 +17,9 @@ installErrorLog(() => {
 
 initTelegram();
 
-// Brauzerda (Telegram tashqarisida) ilovani o‘rnatish mumkin bo‘lsin — PWA service worker
-if (!inTelegram && "serviceWorker" in navigator && import.meta.env.PROD) {
+// Service worker: tez ochilish (keshdan), internetsiz ishlash va brauzerda o‘rnatish (PWA).
+// Telegram ichida ham — u yerda ham keyingi ochilishlar keshdan bir zumda bo‘ladi.
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
   addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
 }
 

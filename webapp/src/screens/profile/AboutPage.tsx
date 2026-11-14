@@ -1,4 +1,4 @@
-import { ExternalLink, MessageCircle, ShieldCheck, Store } from "lucide-react";
+import { ExternalLink, MessageCircle, Phone, Send, ShieldCheck, Store } from "lucide-react";
 import { LogoMark } from "../../components/brand";
 import { Row, Section } from "../../components/ios/Grouped";
 import { Page } from "../../components/ios/Page";
@@ -33,6 +33,11 @@ export function AboutPage() {
           chevron={!!BOT_USERNAME}
           onClick={BOT_USERNAME ? () => openTelegramLink(`https://t.me/${BOT_USERNAME}?start=markaz`) : undefined}
         />
+      </Section>
+
+      <Section header="Admin bilan bog‘lanish">
+        <Row icon={<Send size={17} />} iconBg="#1E6FD9" title="Telegram" value="@NOZIMJONS" chevron onClick={() => openTelegramLink("https://t.me/NOZIMJONS")} />
+        <Row icon={<Phone size={17} />} iconBg="#34C759" title="Telefon" value="+998 90 389 21 26" chevron onClick={() => (location.href = "tel:+998903892126")} />
       </Section>
 
       <Section footer="Xarita ma’lumotlari © OpenStreetMap hissadorlari.">

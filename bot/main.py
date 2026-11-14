@@ -420,16 +420,31 @@ async def menu_teacher(message: Message, state: FSMContext):
 
 
 # ---------------- Admin bilan bog'lanish ----------------
+# Admin kontaktlari («💬 Admin bilan bog'lanish»)
+ADMIN_TG = "NOZIMJONS"
+ADMIN_PHONE = "+998 90 389 21 26"
+
+
 @router.message(F.text == BTN_ADMIN)
 async def menu_admin(message: Message, state: FSMContext):
-    if not ADMIN_IDS:
-        return await message.answer("Hozircha admin ulanmagan. Keyinroq urinib ko‘ring.")
-    await state.set_state(Support.ask)
+    await state.clear()
+    rows = [[InlineKeyboardButton(text=f"✈️ Telegram: @{ADMIN_TG}", url=f"https://t.me/{ADMIN_TG}", style="primary")]]
+    if ADMIN_IDS:
+        rows.append([btn("✍️ Shu yerda yozish", "sup")])
     await message.answer(
-        "✍️ Savolingiz yoki taklifingizni bitta xabarda yozing — adminga yetkazaman va javobni shu yerga yuboraman.\n\n"
-        "Bekor qilish: /cancel",
-        reply_markup=main_menu(),
+        "💬 <b>Admin bilan bog‘lanish</b>\n\n"
+        f"✈️ Telegram: @{ADMIN_TG}\n"
+        f"📞 Telefon: {ADMIN_PHONE}\n\n"
+        "Yoki savolingizni shu yerda yozing — adminga yetkazaman.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
+
+
+@router.callback_query(F.data == "sup")
+async def support_start(call: CallbackQuery, state: FSMContext):
+    await state.set_state(Support.ask)
+    await call.message.answer("✍️ Savolingiz yoki taklifingizni bitta xabarda yozing.\n\nBekor qilish: /cancel")
+    await call.answer()
 
 
 @router.message(Support.ask, TEXT)
