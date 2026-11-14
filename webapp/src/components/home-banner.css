@@ -1,0 +1,54 @@
+/* YaqinDars — HomeBanner. Faqat transform/opacity animatsiyalar. */
+.hb{margin:0 16px}
+.hb-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:20px;-webkit-overflow-scrolling:touch}
+.hb-track::-webkit-scrollbar{display:none}
+.hb-slide{flex:0 0 100%;scroll-snap-align:start;position:relative;overflow:hidden;min-height:132px;padding:18px 16px 18px 18px;display:flex;align-items:center;justify-content:space-between;gap:8px;color:#fff;box-sizing:border-box}
+.hb-seats{background:#1E6FD9}
+.hb-trial{background:#13804F}
+.hb-owner{background:#0F3D7A}
+.hb-copy{position:relative;z-index:1;min-width:0}
+.hb-copy h3{margin:0;font-size:19px;line-height:1.2;font-weight:800;letter-spacing:-.2px}
+.hb-copy p{margin:4px 0 12px;font-size:14px;line-height:1.35;opacity:.92}
+.hb-copy button{height:36px;padding:0 16px;border:0;border-radius:18px;background:#fff;color:#0F3D7A;font:inherit;font-size:14px;font-weight:700;cursor:pointer;transition:transform .12s}
+.hb-copy button:active{transform:scale(.95)}
+.hb-art{width:112px;height:90px;flex:none}
+
+/* matn har slayd ochilganda yengil ko‘tariladi */
+.hb-slide .hb-copy{opacity:.001;transform:translateY(8px)}
+.hb-slide.is-on .hb-copy{opacity:1;transform:none;transition:opacity .35s,transform .45s cubic-bezier(.2,.8,.2,1)}
+
+/* 1 — xarita: nuqtalar tushadi, radar pulslanadi */
+.hb-road{fill:none;stroke:#fff;stroke-opacity:.18;stroke-width:5}
+.hb-radar{fill:#fff;fill-opacity:.18;transform-origin:62px 52px}
+.is-on .hb-radar{animation:hb-pulse 2s ease-out infinite}
+.hb-pin>path{transform-box:fill-box}
+.is-on .hb-pin{animation:hb-drop .6s cubic-bezier(.3,1.5,.5,1) both}
+.hb-d1{animation-delay:.1s!important}.hb-d2{animation-delay:.3s!important}.hb-d3{animation-delay:.5s!important}
+
+/* 2 — belgi chiziladi, atrofi nafas oladi */
+.hb-glow{fill:#fff;fill-opacity:.2;transform-origin:60px 48px}
+.is-on .hb-glow{animation:hb-pulse 2.2s ease-out infinite}
+.hb-check{fill:none;stroke:#fff;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:44;stroke-dashoffset:44}
+.is-on .hb-check{animation:hb-draw .5s .25s ease-out forwards}
+
+/* 3 — VIP belgi suzadi, ustidan yaltiroq o‘tadi */
+.is-on .hb-float{animation:hb-float 3s ease-in-out infinite}
+.hb-shine{fill:#fff;opacity:.18;transform:skewX(-18deg)}
+.is-on .hb-shine{animation:hb-shine 2.8s .4s ease-in-out infinite}
+
+/* nuqtalar — matn rangidan (dark mode’da oq, yorug‘da to‘q); banner ranglari esa o‘zgarmaydi */
+.hb-dots{color:var(--ink);display:flex;justify-content:center;gap:6px;margin-top:10px}
+.hb-dots span{width:6px;height:6px;border-radius:3px;background:currentColor;opacity:.25;transition:width .25s,opacity .25s}
+.hb-dots span.on{width:18px;opacity:.9}
+
+@keyframes hb-pulse{0%{transform:scale(.6);opacity:.9}100%{transform:scale(1.5);opacity:0}}
+@keyframes hb-drop{0%{opacity:0;translate:0 -24px}100%{opacity:1;translate:0 0}}
+@keyframes hb-draw{to{stroke-dashoffset:0}}
+@keyframes hb-float{0%,100%{translate:0 0}50%{translate:0 -5px}}
+@keyframes hb-shine{0%{translate:0 0}60%,100%{translate:190px 0}}
+
+@media (prefers-reduced-motion:reduce){
+  .hb-slide *{animation:none!important;transition:none!important}
+  .hb-check{stroke-dashoffset:0}
+  .hb-slide .hb-copy{opacity:1;transform:none}
+}

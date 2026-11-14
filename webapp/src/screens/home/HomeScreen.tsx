@@ -8,11 +8,12 @@ import { listItem } from "../../components/ios/motion";
 import { Page } from "../../components/ios/Page";
 import { fmtDayLabel, fmtSum, fmtTime } from "../../lib/format";
 import { distanceKm, formatDistance, routeUrl } from "../../lib/geo";
-import { openLink } from "../../lib/telegram";
-import { displayName, IS_DEMO, useApp, useApplications, useCenter, useOrigin } from "../../store/app";
+import { openLink, openTelegramLink } from "../../lib/telegram";
+import { displayName, IS_DEMO, useApp, useApplications, useCenter, useOrigin, useBotUsername } from "../../store/app";
 import { useFilters } from "../../store/filters";
 import { useNav } from "../../store/nav";
 import { AddressSheet } from "./AddressSheet";
+import HomeBanner from "../../components/HomeBanner";
 
 const GRID = ["Ingliz tili", "Matematika", "IT", "Rus tili", "Kimyo", "Biologiya", "Sport"];
 
@@ -133,6 +134,25 @@ export function HomeScreen() {
     return { free, vip, tutors };
   }, [centers, pos]);
 
+  const botUsername = useBotUsername();
+
+  const onBanner = (id: "seats" | "trial" | "owner") => {
+    if (id === "seats") {
+      setFilters({ freeOnly: true, subject: null });
+      setTab("map");
+    } else if (id === "trial") {
+      setTab("map");
+    } else if (botUsername) {
+      // /markaz bilan bir xil: bot «📝 Markazni qo‘shish» tugmasini beradi (ma’lumot sendData orqali botga ketadi)
+      openTelegramLink(`https://t.me/${botUsername}?start=markaz`);
+    } else {
+      // bot username hali noma’lum — ro‘yxatdan o‘tish formasini to‘g‘ridan-to‘g‘ri ochamiz
+      const u = new URL(location.href);
+      u.searchParams.set("mode", "register");
+      location.href = u.toString();
+    }
+  };
+
   const openSubject = (s: string | null) => {
     setFilters({ subject: s });
     setTab("map");
@@ -162,6 +182,10 @@ export function HomeScreen() {
         </div>
       }
     >
+      <div className="mt-4">
+        <HomeBanner onAction={onBanner} />
+      </div>
+
       {/* Fanlar grid: 2 × 4 */}
       <div className="mx-4 mt-5 grid grid-cols-4 gap-y-4 rounded-card bg-card px-2 py-4 shadow-card">
         {GRID.map((s) => (
