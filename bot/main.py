@@ -63,7 +63,7 @@ PRIVACY_URL = urljoin(WEBAPP_URL.split("?")[0], "privacy")  # webapp/public/priv
 
 # AI yordamchi (Groq, ixtiyoriy). Kalit bo'lmasa — ilovada oddiy qidiruv ishlaydi.
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b").strip()
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 AI_PER_HOUR = 20  # bitta foydalanuvchi soatiga nechta savol bera oladi
 
