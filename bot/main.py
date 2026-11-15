@@ -111,6 +111,7 @@ from aiogram.fsm.context import FSMContext  # noqa: E402
 from aiogram.fsm.state import State, StatesGroup  # noqa: E402
 from aiogram.types import (  # noqa: E402
     BotCommand,
+    BotCommandScopeChat,
     ErrorEvent,
     CallbackQuery,
     InlineKeyboardButton,
@@ -1773,6 +1774,34 @@ async def reminder_loop(bot: Bot):
         await asyncio.sleep(REMIND_CHECK_EVERY)
 
 
+# ---------------- Kuzatuvchilar qo'riqchisi ----------------
+WATCH_CHECK_EVERY = 60  # soniya
+
+
+async def supervise_watchers(watchers: dict, factories: dict):
+    """Har daqiqada: o'chib qolgan Firestore kuzatuvchisini qayta ishga tushiradi.
+    Qayta ulanganda o'tkazib yuborilgan hodisalar ham keladi (masalan, notified=false arizalar)."""
+    while True:
+        await asyncio.sleep(WATCH_CHECK_EVERY)
+        for name, w in list(watchers.items()):
+            try:
+                alive = bool(getattr(w, "is_active", True))
+            except Exception:  # noqa: BLE001
+                alive = False
+            if alive:
+                continue
+            log.warning("Kuzatuvchi to'xtagan: %s — qayta ishga tushiryapman", name)
+            try:
+                w.unsubscribe()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                watchers[name] = await asyncio.to_thread(factories[name])
+                log.info("Kuzatuvchi tiklandi: %s", name)
+            except Exception as e:  # noqa: BLE001
+                log.warning("Kuzatuvchini tiklab bo'lmadi (%s): %s — keyingi tekshiruvda yana urinaman", name, e)
+
+
 # ---------------- Main ----------------
 def ssl_context() -> ssl.SSLContext:
     ctx = ssl.create_default_context()  # tizim ombori
@@ -1813,14 +1842,25 @@ async def main():
             wait = 5 * 2 ** attempt
             log.warning("Telegram'ga ulanib bo'lmadi (%s) — %s s dan keyin qayta urinaman", e, wait)
             await asyncio.sleep(wait)
-    await bot.set_my_commands([
+    user_cmds = [
         BotCommand(command="start", description="Bosh menyu"),
         BotCommand(command="markaz", description="Markazni qo‘shish / boshqarish"),
         BotCommand(command="help", description="Yordam"),
         BotCommand(command="delete", description="Ma’lumotlarimni o‘chirish"),
-        BotCommand(command="admin", description="Admin panel (faqat admin)"),
         BotCommand(command="cancel", description="Bekor qilish"),
-    ])
+    ]
+    await bot.set_my_commands(user_cmds)
+    # Admin buyruqlari faqat adminlarning menyusida
+    admin_cmds = user_cmds + [
+        BotCommand(command="admin", description="Admin panel"),
+        BotCommand(command="stat", description="Statistika"),
+        BotCommand(command="logs", description="Oxirgi xatolar"),
+    ]
+    for admin in ADMIN_IDS:
+        try:
+            await bot.set_my_commands(admin_cmds, scope=BotCommandScopeChat(chat_id=admin))
+        except Exception as e:  # noqa: BLE001 — admin botni hali boshlamagan bo'lishi mumkin
+            log.info("Admin %s menyusi o'rnatilmadi: %s", admin, e)
 
     me = await bot.get_me()
     # Web app «Ulashish» va «Markaz qo‘shish» havolalari uchun bot username'i (ochiq ma'lumot)
@@ -1830,14 +1870,21 @@ async def main():
     )
 
     loop = asyncio.get_running_loop()
-    watch = start_application_watcher(bot, loop)
-    links = start_link_watcher()
-    chats = start_chat_watcher(bot, loop)
-    statuses = start_status_watcher(bot, loop)
-    seats = start_seats_watcher(bot, loop)
-    deletes = start_delete_watcher(bot, loop)
-    ai = start_ai_watcher(loop) if GROQ_API_KEY else None
-    approvals = start_approval_watcher(bot, loop)
+    # Firestore kuzatuvchilari: internet uzilsa (kompyuter uyqusi, server qayta ulanishi) jimgina to'xtab
+    # qolishi mumkin — qo'riqchi har daqiqada tekshiradi va o'chganini qayta ishga tushiradi.
+    factories = {
+        "arizalar": lambda: start_application_watcher(bot, loop),
+        "tasdiqlash (Telegram)": start_link_watcher,
+        "chat": lambda: start_chat_watcher(bot, loop),
+        "ariza holati": lambda: start_status_watcher(bot, loop),
+        "bo'sh joylar": lambda: start_seats_watcher(bot, loop),
+        "ma'lumot o'chirish": lambda: start_delete_watcher(bot, loop),
+        "markaz tasdiqlash": lambda: start_approval_watcher(bot, loop),
+    }
+    if GROQ_API_KEY:
+        factories["AI"] = lambda: start_ai_watcher(loop)
+    watchers = {name: make() for name, make in factories.items()}
+    supervisor = asyncio.create_task(supervise_watchers(watchers, factories))
     await asyncio.to_thread(ensure_admin_claims)
     reminder = asyncio.create_task(reminder_loop(bot))
     cleanup = asyncio.create_task(cleanup_loop())
@@ -1846,15 +1893,12 @@ async def main():
     try:
         await dp.start_polling(bot)
     finally:
-        watch.unsubscribe()
-        links.unsubscribe()
-        chats.unsubscribe()
-        statuses.unsubscribe()
-        seats.unsubscribe()
-        deletes.unsubscribe()
-        if ai:
-            ai.unsubscribe()
-        approvals.unsubscribe()
+        supervisor.cancel()
+        for w in watchers.values():
+            try:
+                w.unsubscribe()
+            except Exception:  # noqa: BLE001
+                pass
         reminder.cancel()
         cleanup.cancel()
         log_listener.stop()
