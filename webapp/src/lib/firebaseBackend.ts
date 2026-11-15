@@ -31,6 +31,7 @@ import {
 import { FIREBASE_CONFIG } from "../../config";
 import type { AdminApi, AdminCenter, ApplyInput, Backend, OwnerApi, OwnerCenter, ProfileDoc } from "./backend";
 import { centerChatId } from "./backend";
+import { billingOf, extendUntil } from "./billing";
 import { ruleBasedReply } from "./match";
 import { initData, tgUser } from "./telegram";
 import type { Application, AppStatus, Center, Chat, Child, Day, Message } from "./types";
@@ -217,7 +218,13 @@ export async function createFirebaseBackend(): Promise<Backend> {
               cb(
                 s.docs.map((d): OwnerCenter => {
                   const x = d.data({ serverTimestamps: "estimate" });
-                  return { ...toCenter(d.id, x), approved: x.approved === true, tariff: x.tariff === "vip" || x.tariff === "oddiy" ? x.tariff : null };
+                  return {
+                    ...toCenter(d.id, x),
+                    approved: x.approved === true,
+                    tariff: x.tariff === "vip" || x.tariff === "oddiy" ? x.tariff : null,
+                    createdMs: ms(x.createdAt),
+                    paidUntilMs: ms(x.paidUntil) || null
+                  };
                 })
               ),
             (e) => console.warn("myCenters:", e)
@@ -260,7 +267,8 @@ export async function createFirebaseBackend(): Promise<Backend> {
               tariff: x.tariff === "vip" || x.tariff === "oddiy" ? x.tariff : null,
               ownerTgId: typeof x.ownerTgId === "number" ? x.ownerTgId : null,
               ownerUsername: typeof x.ownerUsername === "string" ? x.ownerUsername : null,
-              createdMs: ms(x.createdAt)
+              createdMs: ms(x.createdAt),
+              paidUntilMs: ms(x.paidUntil) || null
             };
           });
         },
@@ -286,6 +294,11 @@ export async function createFirebaseBackend(): Promise<Backend> {
             getCountFromServer(query(collection(db, "aiRequests"), where("createdAt", ">=", day))).catch(() => null)
           ]);
           return { chats: chats?.data().count ?? 0, waitlist: waitlist?.data().count ?? 0, ai24h: ai?.data().count ?? 0 };
+        },
+        async markPaid(c, months) {
+          const until = extendUntil(billingOf(c), months);
+          await updateDoc(doc(db, "centers", c.id), { paidUntil: Timestamp.fromMillis(until), updatedAt: serverTimestamp() });
+          return until;
         },
         async setCenter(c, patch) {
           await updateDoc(doc(db, "centers", c.id), {

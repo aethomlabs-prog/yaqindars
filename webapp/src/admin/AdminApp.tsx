@@ -19,6 +19,7 @@ import {
   Sparkles,
   Star,
   Wallet,
+  Banknote,
   X,
   XCircle
 } from "lucide-react";
@@ -29,6 +30,7 @@ import { EmptyState, SkeletonList } from "../components/motion";
 import { OfflineBanner } from "../components/OfflineBanner";
 import type { AdminCenter, AdminCounts, AdminLog } from "../lib/backend";
 import { fmtDate, fmtListTime, fmtSum } from "../lib/format";
+import { billingOf } from "../lib/billing";
 import { haptic, inTelegram, openTelegramLink } from "../lib/telegram";
 import type { Application, AppStatus } from "../lib/types";
 import { useApp } from "../store/app";
@@ -83,7 +85,30 @@ function Kpi({ icon, label, value, sub, tone = "var(--viz-1)", alert }: { icon: 
 }
 
 /* ---------- markaz kartochkasi (navbat va ro‘yxat uchun) ---------- */
-function CenterRow({ c, appsCount, busy, onSet }: { c: AdminCenter; appsCount: number; busy: boolean; onSet: (status: "approved" | "rejected", vip: boolean) => void }) {
+function BillingChip({ c }: { c: AdminCenter }) {
+  const b = billingOf(c);
+  if (b.state === "pending") return null;
+  const m = {
+    trial: { cls: "bg-green-soft text-green-text", t: `Sinov: ${b.days} kun` },
+    active: { cls: "bg-green-soft text-green-text", t: `To‘langan: ${fmtDate(b.until)}` },
+    overdue: { cls: "bg-red-soft text-red-text", t: `Muddati o‘tgan: ${b.days} kun` }
+  }[b.state];
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-caption ${m.cls}`}>{m.t}</span>;
+}
+
+function CenterRow({
+  c,
+  appsCount,
+  busy,
+  onSet,
+  onPaid
+}: {
+  c: AdminCenter;
+  appsCount: number;
+  busy: boolean;
+  onSet: (status: "approved" | "rejected", vip: boolean) => void;
+  onPaid: () => void;
+}) {
   const free = c.groups.reduce((s, g) => s + g.freeSeats, 0);
   return (
     <div className="flex flex-col gap-3 rounded-[16px] bg-card2 p-3.5 lg:flex-row lg:items-center">
@@ -93,6 +118,7 @@ function CenterRow({ c, appsCount, busy, onSet }: { c: AdminCenter; appsCount: n
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-headline">{clean(c.name)}</span>
             {c.vip && <VipBadge />}
+            <BillingChip c={c} />
             {!c.approved && (
               <span className="inline-flex items-center gap-1 rounded-full bg-gold-soft px-2 py-0.5 text-caption text-gold-text">
                 <Hourglass size={12} aria-hidden /> Kutilmoqda
@@ -127,9 +153,14 @@ function CenterRow({ c, appsCount, busy, onSet }: { c: AdminCenter; appsCount: n
             </Button>
           </>
         ) : (
-          <Button kind={c.vip ? "gray" : "tinted"} size="md" loading={busy} onClick={() => onSet("approved", !c.vip)}>
-            <Star size={17} aria-hidden /> {c.vip ? "VIP’ni o‘chirish" : "VIP qilish"}
-          </Button>
+          <>
+            <Button kind="green" size="md" disabled={busy} onClick={onPaid}>
+              <Banknote size={17} aria-hidden /> To‘lov +1 oy
+            </Button>
+            <Button kind={c.vip ? "gray" : "tinted"} size="md" loading={busy} onClick={() => onSet("approved", !c.vip)}>
+              <Star size={17} aria-hidden /> {c.vip ? "VIP’ni o‘chirish" : "VIP qilish"}
+            </Button>
+          </>
         )}
       </div>
     </div>
@@ -151,7 +182,7 @@ export default function AdminApp() {
   const [busyId, setBusyId] = useState<string | null>(null);
   // filtrlar
   const [cq, setCq] = useState("");
-  const [cf, setCf] = useState<"all" | "pending" | "approved" | "vip">("all");
+  const [cf, setCf] = useState<"all" | "pending" | "approved" | "vip" | "overdue">("all");
   const [aq, setAq] = useState("");
   const [af, setAf] = useState<AppStatus | "all">("all");
 
@@ -185,11 +216,12 @@ export default function AdminApp() {
     const pending = cs.filter((c) => !c.approved);
     const vip = approved.filter((c) => c.vip);
     const mrr = approved.reduce((s, c) => s + (c.vip || c.tariff === "vip" ? PRICE.vip : PRICE.oddiy), 0);
+    const overdue = approved.filter((c) => billingOf(c).state === "overdue");
     const by = (st: AppStatus) => periodApps.filter((a) => a.status === st).length;
     const decided = by("accepted") + by("rejected");
     const today = apps.filter((a) => a.createdMs >= new Date().setHours(0, 0, 0, 0)).length;
     const errors24 = logs.filter((l) => l.createdMs >= Date.now() - DAY).length;
-    return { total: cs.length, approved: approved.length, pending, vip: vip.length, mrr, by, rate: decided ? Math.round((by("accepted") / decided) * 100) : null, today, errors24 };
+    return { total: cs.length, approved: approved.length, pending, overdue, vip: vip.length, mrr, by, rate: decided ? Math.round((by("accepted") / decided) * 100) : null, today, errors24 };
   }, [centers, periodApps, apps, logs]);
 
   const daily: Point[] = useMemo(() => {
@@ -246,10 +278,28 @@ export default function AdminApp() {
     }
   };
 
+  const markPaid = async (c: AdminCenter) => {
+    if (!api) return;
+    const b = billingOf(c);
+    if (!confirm(`«${clean(c.name)}»: ${fmtSum(b.price)} to‘lov qabul qilindimi? Muddat 1 oyga uzaytiriladi.`)) return;
+    setBusyId(c.id);
+    try {
+      const until = await api.markPaid(c, 1);
+      haptic.success();
+      showToast(`To‘lov qayd etildi — ${fmtDate(until)} gacha`, "ok");
+      setCenters((cs) => cs!.map((x) => (x.id === c.id ? { ...x, paidUntilMs: until } : x)));
+    } catch (e) {
+      console.error(e);
+      showToast("Saqlanmadi (ruxsat yoki internet)", "error");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const filteredCenters = useMemo(() => {
     const q = cq.trim().toLowerCase();
     return (centers ?? [])
-      .filter((c) => (cf === "pending" ? !c.approved : cf === "approved" ? c.approved : cf === "vip" ? c.vip : true))
+      .filter((c) => (cf === "pending" ? !c.approved : cf === "approved" ? c.approved : cf === "vip" ? c.vip : cf === "overdue" ? c.approved && billingOf(c).state === "overdue" : true))
       .filter((c) => !q || c.name.toLowerCase().includes(q) || c.address.toLowerCase().includes(q) || (c.ownerUsername ?? "").toLowerCase().includes(q))
       .sort((a, b) => Number(a.approved) - Number(b.approved) || b.createdMs - a.createdMs);
   }, [centers, cq, cf]);
@@ -381,6 +431,7 @@ export default function AdminApp() {
                 <Kpi icon={<Building2 size={15} />} label="Markazlar" value={stats.approved} sub={`jami ${stats.total} · VIP ${stats.vip}`} />
                 <Kpi icon={<Hourglass size={15} />} label="Tasdiq kutmoqda" value={stats.pending.length} tone="var(--st-warning)" alert={stats.pending.length > 0} sub={stats.pending.length ? "pastda navbat" : "navbat bo‘sh"} />
                 <Kpi icon={<Wallet size={15} />} label="Oylik daromad (taxm.)" value={fmtSum(stats.mrr).replace(" so‘m", "")} sub="so‘m · birinchi oy bepul hisobga olinmagan" tone="var(--st-good)" />
+                <Kpi icon={<Banknote size={15} />} label="To‘lov muddati o‘tgan" value={stats.overdue.length} tone="var(--st-critical)" alert={stats.overdue.length > 0} sub={stats.overdue.length ? "Markazlar → «Muddati o‘tgan»" : "hammasi to‘langan"} />
                 <Kpi icon={<ClipboardList size={15} />} label={`Arizalar (${days} kun)`} value={periodApps.length} sub={`bugun ${stats.today}`} />
                 <Kpi icon={<CheckCircle2 size={15} />} label="Qabul darajasi" value={stats.rate === null ? "—" : `${stats.rate}%`} sub="qabul / (qabul + rad)" tone="var(--st-good)" />
                 <Kpi icon={<Sparkles size={15} />} label="AI savollar (24 s)" value={counts.ai24h} />
@@ -392,7 +443,7 @@ export default function AdminApp() {
                 <Card title={`Tasdiqlash navbati · ${stats.pending.length}`}>
                   <div className="space-y-2.5">
                     {stats.pending.map((c) => (
-                      <CenterRow key={c.id} c={c} appsCount={appsByCenter.get(c.id) ?? 0} busy={busyId === c.id} onSet={(st, vip) => setCenter(c, st, vip)} />
+                      <CenterRow key={c.id} c={c} appsCount={appsByCenter.get(c.id) ?? 0} busy={busyId === c.id} onSet={(st, vip) => setCenter(c, st, vip)} onPaid={() => markPaid(c)} />
                     ))}
                   </div>
                 </Card>
@@ -430,7 +481,8 @@ export default function AdminApp() {
                       ["all", `Hammasi ${centers.length}`],
                       ["pending", `Kutilmoqda ${stats.pending.length}`],
                       ["approved", `Tasdiqlangan ${stats.approved}`],
-                      ["vip", `VIP ${stats.vip}`]
+                      ["vip", `VIP ${stats.vip}`],
+                      ["overdue", `Muddati o‘tgan ${stats.overdue.length}`]
                     ] as const
                   ).map(([k, l]) => (
                     <Chip key={k} active={cf === k} onClick={() => setCf(k)}>
@@ -441,7 +493,7 @@ export default function AdminApp() {
               </div>
               <div className="space-y-2.5">
                 {filteredCenters.length ? (
-                  filteredCenters.map((c) => <CenterRow key={c.id} c={c} appsCount={appsByCenter.get(c.id) ?? 0} busy={busyId === c.id} onSet={(st, vip) => setCenter(c, st, vip)} />)
+                  filteredCenters.map((c) => <CenterRow key={c.id} c={c} appsCount={appsByCenter.get(c.id) ?? 0} busy={busyId === c.id} onSet={(st, vip) => setCenter(c, st, vip)} onPaid={() => markPaid(c)} />)
                 ) : (
                   <EmptyState kind="search" text="Bu filtr bo‘yicha markaz yo‘q" />
                 )}

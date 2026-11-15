@@ -25,6 +25,13 @@ export const FUNCTIONS_URL: string = "";
 /** Bot username (@ siz) — /markaz havolasi va «Ulashish» uchun. */
 export const BOT_USERNAME: string = "";
 
+/** To‘lov va murojaatlar — admin kontaktlari (kabinetdagi «Hisobim», «Ilova haqida») */
+export const ADMIN_TELEGRAM = "NOZIMJONS";
+export const ADMIN_PHONE = "+998 90 389 21 26";
+/** Tarif narxlari (so‘m/oy) va bepul sinov muddati (kun) — bot/parsers.py TARIFF_PRICES bilan bir xil */
+export const TARIFF_PRICE = { oddiy: 75000, vip: 150000 } as const;
+export const TRIAL_DAYS = 30;
+
 /** Rus tili tarjimasi tayyor bo‘lguncha til tanlash yashirin, interfeys doim o‘zbekcha. */
 export const LANG_SWITCH_ENABLED = false;
 

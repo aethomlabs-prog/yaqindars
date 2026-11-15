@@ -25,13 +25,16 @@ export type Unsub = () => void;
 export interface OwnerCenter extends Center {
   approved: boolean;
   tariff: "oddiy" | "vip" | null;
+  /** ro‘yxatdan o‘tgan vaqt (bepul sinov oyi shundan hisoblanadi) */
+  createdMs: number;
+  /** admin to‘lovni qabul qilgach — shu sanagacha to‘langan */
+  paidUntilMs: number | null;
 }
 
 /** Admin dashboard */
 export interface AdminCenter extends OwnerCenter {
   ownerTgId: number | null;
   ownerUsername: string | null;
-  createdMs: number;
 }
 export interface AdminLog {
   id: string;
@@ -54,6 +57,8 @@ export interface AdminApi {
   counts(): Promise<AdminCounts>;
   /** status: approved | rejected; vip — VIP holati */
   setCenter(c: AdminCenter, patch: { status: "approved" | "rejected"; vip: boolean }): Promise<void>;
+  /** To‘lov qabul qilindi: muddatni +months oyga uzaytiradi (yangi paidUntilMs ni qaytaradi) */
+  markPaid(c: AdminCenter, months: number): Promise<number>;
 }
 
 export interface OwnerApi {

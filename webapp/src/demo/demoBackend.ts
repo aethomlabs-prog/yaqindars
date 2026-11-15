@@ -89,7 +89,10 @@ export function createDemoBackend(): Backend {
   const mine: OwnerCenter[] = DEMO_CENTERS.filter((c) => c.id === "demo1" || c.id === "demo11").map((c) => ({
     ...structuredClone(c),
     approved: true,
-    tariff: c.vip ? "vip" : "oddiy"
+    tariff: c.vip ? "vip" : "oddiy",
+    // namuna: biri sinov oyida, biri to‘langan
+    createdMs: c.id === "demo1" ? Date.now() - 12 * 86400000 : Date.now() - 50 * 86400000,
+    paidUntilMs: c.id === "demo1" ? null : Date.now() + 18 * 86400000
   }));
   const H = 3600000;
   const ownerApps: Application[] = [
@@ -111,7 +114,10 @@ export function createDemoBackend(): Backend {
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const adminCenters: AdminCenter[] = [
-    ...DEMO_CENTERS.map((c, i) => ({ ...structuredClone(c), approved: true, tariff: (c.vip ? "vip" : "oddiy") as "vip" | "oddiy", ownerTgId: 100000 + i, ownerUsername: `markaz_${i + 1}`, createdMs: Date.now() - (40 - i) * DAYMS })),
+    ...DEMO_CENTERS.map((c, i) => ({ ...structuredClone(c), approved: true, tariff: (c.vip ? "vip" : "oddiy") as "vip" | "oddiy", ownerTgId: 100000 + i, ownerUsername: `markaz_${i + 1}`,
+      createdMs: Date.now() - (i % 3 === 0 ? 10 : 45 + i) * DAYMS,
+      // namuna: ba'zilari to‘lagan, ba'zilarining muddati o‘tgan
+      paidUntilMs: i % 3 === 0 ? null : i % 3 === 1 ? Date.now() + (5 + i) * DAYMS : Date.now() - (2 + i) * DAYMS })),
     ...["Namuna: Yangi Avlod", "Namuna: Bolajon to‘garagi"].map((name, i) => ({
       ...structuredClone(DEMO_CENTERS[i + 2]),
       id: `pending${i}`,
@@ -121,7 +127,8 @@ export function createDemoBackend(): Backend {
       tariff: (i === 0 ? "vip" : "oddiy") as "vip" | "oddiy",
       ownerTgId: 200000 + i,
       ownerUsername: i === 0 ? "yangi_avlod" : null,
-      createdMs: Date.now() - (i + 1) * 3600000
+      createdMs: Date.now() - (i + 1) * 3600000,
+      paidUntilMs: null
     }))
   ];
   const STAT: AppStatus[] = ["new", "seen", "accepted", "accepted", "rejected"];
@@ -157,6 +164,12 @@ export function createDemoBackend(): Backend {
     },
     async counts() {
       return { chats: state.chats.length, waitlist: 6, ai24h: 14 };
+    },
+    async markPaid(c, months) {
+      const x = adminCenters.find((y) => y.id === c.id);
+      const until = Math.max(Date.now(), c.paidUntilMs ?? 0, c.createdMs + 30 * DAYMS) + months * 30 * DAYMS;
+      if (x) x.paidUntilMs = until;
+      return until;
     },
     async setCenter(c, patch) {
       const x = adminCenters.find((y) => y.id === c.id);

@@ -37,6 +37,10 @@ service cloud.firestore {
         && request.resource.data.approvedBy == 'web'
         && request.resource.data.status in ['approved', 'rejected']
         && request.resource.data.approved is bool && request.resource.data.vip is bool;
+      // Admin: to'lov qabul qilindi — muddatni uzaytirish
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paidUntil', 'updatedAt'])
+        && request.resource.data.paidUntil is timestamp;
       allow update: if isTg(resource.data.ownerTgId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['groups', 'updatedAt'])
         && request.resource.data.groups is list && request.resource.data.groups.size() <= 10

@@ -1,7 +1,9 @@
 /* Ta’lim beruvchi kabineti (bot: «🎓 Ta’lim beruvchi bo‘lib kirish» → ?mode=owner).
  * Markazlarim → statistika, arizalar (Ko‘rdim / Qabul / Rad), guruhlar (bo‘sh joy ➖/➕, narx). */
 import { EmptyState, SkeletonList } from "../components/motion";
-import { CalendarClock, Check, ClipboardList, Eye, Hourglass, Map, Minus, Phone, Plus, Users, X } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, ClipboardList, Crown, Eye, Gift, Hourglass, Map, Minus, Phone, Plus, Send, Users, Wallet, X } from "lucide-react";
+import { ADMIN_PHONE, ADMIN_TELEGRAM, TARIFF_PRICE } from "../../config";
+import { billingOf } from "../lib/billing";
 import { useEffect, useMemo, useState } from "react";
 import { LogoMark, SubjectIcon } from "../components/brand";
 import { Button, Chip, VipBadge } from "../components/ios/controls";
@@ -9,8 +11,8 @@ import { listItem } from "../components/ios/motion";
 import { Sheet } from "../components/ios/Sheet";
 import { OfflineBanner } from "../components/OfflineBanner";
 import type { OwnerCenter } from "../lib/backend";
-import { fmtDayLabel, fmtListTime, fmtSum, fmtTime, nextLessonMs } from "../lib/format";
-import { haptic, inTelegram, tg, tgUser } from "../lib/telegram";
+import { fmtDate, fmtDayLabel, fmtListTime, fmtSum, fmtTime, nextLessonMs } from "../lib/format";
+import { haptic, inTelegram, openTelegramLink, tg, tgUser } from "../lib/telegram";
 import type { Application, AppStatus, Group } from "../lib/types";
 import { useApp } from "../store/app";
 
@@ -120,6 +122,76 @@ function AppCard({ a, i, onStatus }: { a: Application; i: number; onStatus: (s: 
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/** «Hisobim»: tarif, obuna holati va admin orqali to‘lash */
+function AccountCard({ c }: { c: OwnerCenter }) {
+  const b = billingOf(c);
+  const name = c.name.replace(/^Namuna:\s*/, "");
+  const ask = (text: string) => {
+    haptic.light();
+    openTelegramLink(`https://t.me/${ADMIN_TELEGRAM}?text=${encodeURIComponent(text)}`);
+  };
+  const pay = () =>
+    ask(`Assalomu alaykum! YaqinDars to‘lovi.
+Markaz: ${name}
+Tarif: ${b.tariff === "vip" ? "VIP" : "Oddiy"} — ${fmtSum(b.price)}/oy
+Markaz ID: ${c.id}`);
+  const upgrade = () => ask(`Assalomu alaykum! «${name}» ni VIP tarifga (${fmtSum(TARIFF_PRICE.vip)}/oy) o‘tkazmoqchiman.
+Markaz ID: ${c.id}`);
+
+  const S = {
+    pending: { icon: <Hourglass size={16} />, cls: "bg-gold-soft text-gold-text", title: "Admin tekshiruvida", text: `Tasdiqlangach ${30} kun bepul ishlaydi.` },
+    trial: { icon: <Gift size={16} />, cls: "bg-green-soft text-green-text", title: `Bepul sinov oyi — ${b.days} kun qoldi`, text: `Birinchi to‘lov: ${fmtDate(b.until)} gacha` },
+    active: { icon: <Check size={16} />, cls: "bg-green-soft text-green-text", title: "Faol", text: `${fmtDate(b.until)} gacha to‘langan (${b.days} kun)` },
+    overdue: { icon: <AlertTriangle size={16} />, cls: "bg-red-soft text-red-text", title: "To‘lov muddati o‘tgan", text: `${fmtDate(b.until)} da tugagan — xaritada qolish uchun to‘lang` }
+  }[b.state];
+
+  return (
+    <div className="mx-4 mt-3 rounded-card bg-card p-4 shadow-card">
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-headline">
+          <Wallet size={18} className="text-tint" aria-hidden /> Hisobim
+        </h2>
+        <span className="tnum text-subhead font-semibold">
+          {b.tariff === "vip" ? "VIP" : "Oddiy"} · {fmtSum(b.price)}
+          <span className="font-normal text-ink2">/oy</span>
+        </span>
+      </div>
+      <div className={`mt-3 flex items-start gap-2.5 rounded-[12px] px-3 py-2.5 ${S.cls}`}>
+        <span className="mt-0.5 shrink-0" aria-hidden>
+          {S.icon}
+        </span>
+        <span>
+          <span className="block text-subhead font-semibold">{S.title}</span>
+          <span className="block text-footnote">{S.text}</span>
+        </span>
+      </div>
+      {b.state !== "pending" && (
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <Button kind={b.state === "overdue" ? "green" : "primary"} size="md" className="flex-1" onClick={pay}>
+            <Send size={17} aria-hidden /> {b.state === "trial" ? "Oldindan to‘lash" : "To‘lash"} — admin orqali
+          </Button>
+          {b.tariff !== "vip" && (
+            <Button kind="tinted" size="md" onClick={upgrade}>
+              <Crown size={17} aria-hidden /> VIP’ga o‘tish
+            </Button>
+          )}
+        </div>
+      )}
+      <p className="mt-3 text-footnote text-ink2">
+        To‘lov admin orqali: Telegram{" "}
+        <button className="font-semibold text-tint" onClick={() => openTelegramLink(`https://t.me/${ADMIN_TELEGRAM}`)}>
+          @{ADMIN_TELEGRAM}
+        </button>{" "}
+        yoki{" "}
+        <a className="font-semibold text-tint" href={`tel:${ADMIN_PHONE.replace(/\s/g, "")}`}>
+          {ADMIN_PHONE}
+        </a>
+        . To‘lovdan keyin admin muddatingizni uzaytiradi.
+      </p>
     </div>
   );
 }
@@ -247,6 +319,8 @@ export default function OwnerApp() {
                   </div>
                 )}
               </div>
+
+              <AccountCard c={center} />
 
               <div className="mx-4 mt-3 flex gap-2.5">
                 <Stat icon={<ClipboardList size={17} />} value={stats.fresh} label="Yangi ariza" tone="#1E6FD9" />
