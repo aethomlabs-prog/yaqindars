@@ -29,7 +29,7 @@ import {
   type Firestore
 } from "firebase/firestore";
 import { FIREBASE_CONFIG } from "../../config";
-import type { AdminApi, AdminCenter, ApplyInput, Backend, CenterEvent, OwnerApi, OwnerCenter, ProfileDoc } from "./backend";
+import type { AdminApi, AdminCenter, ApplyInput, Backend, CenterEvent, DailyStat, OwnerApi, OwnerCenter, ProfileDoc } from "./backend";
 import { appSource, tashkentDate } from "./source";
 import { centerChatId } from "./backend";
 import { billingOf, extendUntil } from "./billing";
@@ -194,6 +194,24 @@ export async function prefetchCenters(cb: (centers: Center[], fromCache: boolean
   cb(toCenters(fresh.docs), false);
 }
 
+/** Voronka va manbalar: kuniga bir marta «ilova ochildi» (qurilma), manba bo‘yicha birinchi kelish — bir marta */
+function countVisit(db: Firestore) {
+  const date = tashkentDate();
+  try {
+    if (localStorage.getItem("yd-open") !== date) {
+      localStorage.setItem("yd-open", date);
+      setDoc(doc(db, "dailyStats", date), { date, open: increment(1) }, { merge: true }).catch(() => {});
+    }
+    const src = appSource();
+    if (src && !localStorage.getItem("yd-src-counted")) {
+      localStorage.setItem("yd-src-counted", src);
+      setDoc(doc(db, "sourceStats", src), { source: src, users: increment(1) }, { merge: true }).catch(() => {});
+    }
+  } catch {
+    /* xususiy rejim — hisoblanmaydi */
+  }
+}
+
 export async function createFirebaseBackend(): Promise<Backend> {
   const { app, db } = getDb();
   const auth = getAuth(app);
@@ -317,6 +335,20 @@ export async function createFirebaseBackend(): Promise<Backend> {
           await updateDoc(doc(db, "centers", c.id), { paidUntil: Timestamp.fromMillis(until), updatedAt: serverTimestamp(), ...(c.hidden ? { hidden: false } : {}) });
           return until;
         },
+        async loadDaily(sinceDate) {
+          const snap = await getDocs(query(collection(db, "dailyStats"), where("date", ">=", sinceDate)));
+          return snap.docs.map((d): DailyStat => {
+            const x = d.data();
+            return { date: d.id, open: num(x.open) ?? 0, view: num(x.view) ?? 0, apply: num(x.apply) ?? 0, accept: num(x.accept) ?? 0 };
+          });
+        },
+        async loadSources() {
+          const snap = await getDocs(collection(db, "sourceStats"));
+          return snap.docs.map((d) => ({ source: d.id, users: num(d.data().users) ?? 0, apps: num(d.data().apps) ?? 0 }));
+        },
+        async remindStale() {
+          await addDoc(collection(db, "botRequests"), { type: "remindStale", tgId, status: "pending", createdAt: serverTimestamp() });
+        },
         async addCenter(input) {
           const ref = await addDoc(collection(db, "centers"), {
             name: input.name.slice(0, 100),
@@ -356,6 +388,8 @@ export async function createFirebaseBackend(): Promise<Backend> {
         }
       }
     : undefined;
+
+  countVisit(db);
 
   const backend: Backend = {
     owner,
@@ -487,6 +521,7 @@ export async function createFirebaseBackend(): Promise<Backend> {
       }
       const date = tashkentDate();
       setDoc(doc(db, "centerStats", `${centerId}_${date}`), { centerId, date, [ev]: increment(1) }, { merge: true }).catch(() => {});
+      if (ev === "views") setDoc(doc(db, "dailyStats", date), { date, view: increment(1) }, { merge: true }).catch(() => {});
     },
 
     async loadProfile() {

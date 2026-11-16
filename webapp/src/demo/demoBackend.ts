@@ -189,6 +189,29 @@ export function createDemoBackend(): Backend {
       if (x) x.paidUntilMs = until;
       return until;
     },
+    async loadDaily(sinceDate) {
+      const out = [];
+      for (let d = 29; d >= 0; d--) {
+        const date = new Date(Date.now() + 5 * 3600000 - d * DAYMS).toISOString().slice(0, 10);
+        if (date < sinceDate) continue;
+        const apply = adminApps.filter((a) => new Date(a.createdMs + 5 * 3600000).toISOString().slice(0, 10) === date).length;
+        const open = Math.round(40 + rnd() * 30 + (29 - d) * 2);
+        out.push({ date, open, view: Math.round(open * (0.45 + rnd() * 0.2)), apply, accept: Math.round(apply * 0.4) });
+      }
+      return out;
+    },
+    async loadSources() {
+      return [
+        { source: "src_flyer", users: 84, apps: 11 },
+        { source: "src_maktab", users: 57, apps: 9 },
+        { source: "src_instagram", users: 132, apps: 7 },
+        { source: "c_demo1", users: 41, apps: 6 },
+        { source: "src_stiker", users: 12, apps: 1 }
+      ];
+    },
+    async remindStale() {
+      await new Promise((r) => setTimeout(r, 400));
+    },
     async addCenter(input) {
       const id = `quick${adminCenters.length}`;
       adminCenters.unshift({

@@ -130,6 +130,9 @@ from firebase_admin import auth as fb_auth, credentials, firestore  # noqa: E402
 from google.cloud.firestore_v1.base_query import FieldFilter  # noqa: E402
 
 import ops  # noqa: E402
+import re  # noqa: E402
+
+SOURCE_RE = re.compile(r"(src_[a-z0-9_]{2,30}|c_[A-Za-z0-9]{1,40})")
 from google.api_core.exceptions import AlreadyExists  # noqa: E402
 from logic import (  # noqa: E402
     CAMPAIGNS,
@@ -1375,6 +1378,7 @@ async def notify_application(bot: Bot, ref):
             return
         c = as_dict(center)
         await asyncio.to_thread(bump_stat, center.id, "apps")
+        await asyncio.to_thread(bump_source, data.get("source"))
         if not c.get("ownerTgId"):
             await notify_admins_ownerless_app(bot, center.id, c, data)
             return
@@ -1867,6 +1871,9 @@ CLAIM_REQS = db.collection("claimRequests")  # ilovadagi «Bu mening markazim»
 CLAIM_CODES = db.collection("claimCodes")  # admin bergan bir martalik kodlar
 BOT_REQS = db.collection("botRequests")  # ilovadan botga topshiriq (QR yuborish va h.k.)
 CENTER_STATS = db.collection("centerStats")  # kunlik agregat: {cid}_{sana}: views, calls, routes, apps, accepted
+DAILY_STATS = db.collection("dailyStats")  # {sana}: open, view (ilova) · apply, accept (bot) — admin voronkasi
+SOURCE_STATS = db.collection("sourceStats")  # {src_kanal | c_markaz}: users (ilova) · apps (bot)
+_DAILY_FIELD = {"apps": "apply", "accepted": "accept"}
 BOT_USERNAME = "yaqindars_bot"  # main() da get_me() bilan yangilanadi
 
 
@@ -1889,8 +1896,20 @@ def bump_stat(cid: str, field: str, n: int = 1):
     date = local_date(datetime.now(timezone.utc))
     try:
         CENTER_STATS.document(f"{cid}_{date}").set({"centerId": cid, "date": date, field: firestore.Increment(n)}, merge=True)
+        if field in _DAILY_FIELD:
+            DAILY_STATS.document(date).set({"date": date, _DAILY_FIELD[field]: firestore.Increment(n)}, merge=True)
     except Exception as e:  # noqa: BLE001
         log.info("Statistika yozilmadi (%s.%s): %s", cid, field, e)
+
+
+def bump_source(source, n: int = 1):
+    """Ariza qaysi manbadan kelgan (src_flyer, c_<markaz>) — admin «Manbalar» jadvali uchun."""
+    if not isinstance(source, str) or not SOURCE_RE.fullmatch(source):
+        return
+    try:
+        SOURCE_STATS.document(source).set({"source": source, "apps": firestore.Increment(n)}, merge=True)
+    except Exception as e:  # noqa: BLE001
+        log.info("Manba statistikasi yozilmadi (%s): %s", source, e)
 
 
 def owner_kb() -> InlineKeyboardMarkup:
@@ -2276,7 +2295,13 @@ async def process_bot_request(bot: Bot, ref):
         return
     status = "done"
     try:
-        if req.get("type") == "qr":
+        if req.get("type") == "remindStale":
+            if not is_admin(int(req.get("tgId") or 0)):
+                status = "error"
+            else:
+                n = await remind_stale_centers(bot)
+                await notify_admins(bot, f"🔔 «Yangilanmagan markazlar»: {n} ta egaga eslatma yuborildi.")
+        elif req.get("type") == "qr":
             center = await get_center(str(req.get("centerId", "")))
             c = as_dict(center) if center else {}
             if not center or c.get("ownerTgId") != req.get("tgId"):
@@ -2298,6 +2323,38 @@ def start_botreq_watcher(bot: Bot, loop: asyncio.AbstractEventLoop):
                 asyncio.run_coroutine_threadsafe(process_bot_request(bot, ch.document.reference), loop)
 
     return BOT_REQS.where(filter=FieldFilter("status", "==", "pending")).on_snapshot(on_snapshot)
+
+
+STALE_AFTER = timedelta(days=14)
+
+
+async def remind_stale_centers(bot: Bot) -> int:
+    """14+ kun yangilanmagan (egasi bor, ko'rinadigan) markazlarga eslatma. Yuborilganlar soni."""
+    now = datetime.now(timezone.utc)
+    snaps = await asyncio.to_thread(lambda: list(CENTERS.where(filter=FieldFilter("approved", "==", True)).stream()))
+    sent = 0
+    for snap in snaps:
+        c = as_dict(snap)
+        upd = c.get("updatedAt")
+        if not c.get("ownerTgId") or c.get("hidden") or (isinstance(upd, datetime) and now - upd < STALE_AFTER):
+            continue
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [btn("✅ Hammasi to‘g‘ri", "ok", snap.id)],
+            [InlineKeyboardButton(text="✏️ Kabinetda yangilash", web_app=WebAppInfo(url=OWNER_URL))],
+        ])
+        try:
+            await bot.send_message(
+                c["ownerTgId"],
+                f"👋 <b>{escape(clean_name(c.get('name')))}</b>\nMa’lumotlaringiz 14 kundan beri yangilanmagan.\n"
+                "Bo‘sh joylar va narxlar hali to‘g‘rimi? Yangi ma’lumotli markazlar ota-onalarga yuqoriroq ko‘rinadi.",
+                reply_markup=kb,
+            )
+            sent += 1
+            await asyncio.to_thread(snap.reference.update, {"lastReminderAt": firestore.SERVER_TIMESTAMP})
+        except Exception as e:  # noqa: BLE001
+            log.info("Eslatma yuborilmadi (%s): %s", snap.id, e)
+        await asyncio.sleep(0.05)
+    return sent
 
 
 # ---------------- Haftalik hisobot (dushanba 09:00) ----------------

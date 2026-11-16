@@ -85,13 +85,19 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Ilovadan botga topshiriq: markaz egasi o'z markazining QR posterini so'raydi
+    // Ilovadan botga topshiriq: markaz egasi o'z markazining QR posterini so'raydi;
+    // admin — «Yangilanmagan markazlar»ga bir bosishda eslatma
     match /botRequests/{id} {
       allow create: if isTg(request.resource.data.tgId)
         && request.resource.data.keys().hasOnly(['type', 'centerId', 'tgId', 'status', 'createdAt'])
         && request.resource.data.type == 'qr'
         && request.resource.data.centerId is string && request.resource.data.centerId.size() <= 64
         && ownsCenter(request.resource.data.centerId)
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+      allow create: if isAdmin() && isTg(request.resource.data.tgId)
+        && request.resource.data.keys().hasOnly(['type', 'tgId', 'status', 'createdAt'])
+        && request.resource.data.type == 'remindStale'
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt == request.time;
       allow read: if isAdmin();
@@ -116,6 +122,36 @@ service cloud.firestore {
         && request.resource.data.get('views', 0) - resource.data.get('views', 0) in [0, 1]
         && request.resource.data.get('calls', 0) - resource.data.get('calls', 0) in [0, 1]
         && request.resource.data.get('routes', 0) - resource.data.get('routes', 0) in [0, 1];
+      allow delete: if false;
+    }
+
+    // Admin voronkasi: kunlik hisoblagich, ID = sana. Ilova faqat «open» (qurilma/kun) va «view» ni +1 qiladi;
+    // apply/accept ni bot yozadi. O'qish — faqat admin.
+    match /dailyStats/{date} {
+      allow read: if isAdmin();
+      allow create: if date.matches('^20[0-9]{2}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.date == date
+        && request.resource.data.keys().hasOnly(['date', 'open', 'view'])
+        && request.resource.data.keys().size() == 2
+        && request.resource.data.get('open', 1) == 1
+        && request.resource.data.get('view', 1) == 1;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['open', 'view'])
+        && request.resource.data.diff(resource.data).affectedKeys().size() == 1
+        && request.resource.data.get('open', 0) - resource.data.get('open', 0) in [0, 1]
+        && request.resource.data.get('view', 0) - resource.data.get('view', 0) in [0, 1];
+      allow delete: if false;
+    }
+
+    // Manbalar: ID = src_<kanal> yoki c_<markazId>. Ilova «users» ni +1 qiladi (qurilmada bir marta),
+    // «apps» ni bot yozadi. O'qish — faqat admin.
+    match /sourceStats/{src} {
+      allow read: if isAdmin();
+      allow create: if src.matches('^(src_[a-z0-9_]{2,30}|c_[A-Za-z0-9]{1,40})$')
+        && request.resource.data.keys().hasOnly(['source', 'users'])
+        && request.resource.data.source == src
+        && request.resource.data.users == 1;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['users'])
+        && request.resource.data.users == resource.data.get('users', 0) + 1;
       allow delete: if false;
     }
 

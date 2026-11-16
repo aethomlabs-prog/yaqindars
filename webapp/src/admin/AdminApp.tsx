@@ -20,8 +20,10 @@ import {
   Star,
   Wallet,
   Banknote,
+  BellRing,
   Copy,
   Plus,
+  TrendingUp,
   UserX,
   X,
   XCircle
@@ -31,7 +33,7 @@ import { LogoMark, SubjectIcon } from "../components/brand";
 import { Button, Chip, Segmented, VipBadge } from "../components/ios/controls";
 import { EmptyState, SkeletonList } from "../components/motion";
 import { OfflineBanner } from "../components/OfflineBanner";
-import type { AdminCenter, AdminCounts, AdminLog } from "../lib/backend";
+import type { AdminCenter, AdminCounts, AdminLog, DailyStat, SourceStat } from "../lib/backend";
 import { fmtDate, fmtListTime, fmtSum } from "../lib/format";
 import { billingOf } from "../lib/billing";
 import { haptic, inTelegram, openTelegramLink } from "../lib/telegram";
@@ -40,7 +42,10 @@ import { useApp } from "../store/app";
 import { BarChart, HBars, StatusBars, TableView, type Point } from "./charts";
 import { QuickAddSheet } from "./QuickAddSheet";
 
-type Tab = "overview" | "centers" | "apps" | "logs";
+type Tab = "overview" | "analytics" | "centers" | "apps" | "logs";
+const STALE_DAYS = 14;
+const tDate = (ms: number) => new Date(ms + 5 * 3600000).toISOString().slice(0, 10);
+const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : "—");
 type App = Application & { tgUsername: string | null };
 const DAY = 86400000;
 const PRICE = { oddiy: 75000, vip: 150000 } as const;
@@ -201,6 +206,9 @@ export default function AdminApp() {
   const [logs, setLogs] = useState<AdminLog[]>([]);
   const [counts, setCounts] = useState<AdminCounts>({ chats: 0, waitlist: 0, ai24h: 0 });
   const [loading, setLoading] = useState(false);
+  const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
+  const [sources, setSources] = useState<SourceStat[]>([]);
+  const [reminding, setReminding] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   // filtrlar
   const [cq, setCq] = useState("");
@@ -213,7 +221,16 @@ export default function AdminApp() {
     if (!api) return;
     setLoading(true);
     try {
-      const [c, a, l, n] = await Promise.all([api.loadCenters(), api.loadApplications(Date.now() - 90 * DAY), api.loadLogs(40), api.counts()]);
+      const [c, a, l, n, ds, src] = await Promise.all([
+        api.loadCenters(),
+        api.loadApplications(Date.now() - 90 * DAY),
+        api.loadLogs(40),
+        api.counts(),
+        api.loadDaily(tDate(Date.now() - 90 * DAY)).catch(() => []),
+        api.loadSources().catch(() => [])
+      ]);
+      setDailyStats(ds);
+      setSources(src);
       setCenters(c);
       setApps(a);
       setLogs(l);
@@ -284,6 +301,60 @@ export default function AdminApp() {
         .map(([id, v]) => ({ key: id, label: clean(centers?.find((c) => c.id === id)?.name ?? periodApps.find((a) => a.centerId === id)?.centerName ?? id), value: v })),
     [appsByCenter, centers, periodApps]
   );
+
+  /* ---------- analitika ---------- */
+  const funnel = useMemo(() => {
+    const from = tDate(since);
+    const rows = dailyStats.filter((d) => d.date >= from);
+    const sum = (k: keyof Omit<DailyStat, "date">) => rows.reduce((s, d) => s + d[k], 0);
+    return { open: sum("open"), view: sum("view"), apply: sum("apply"), accept: sum("accept") };
+  }, [dailyStats, since]);
+
+  const funnelDaily = useMemo(() => {
+    const by = new Map(dailyStats.map((d) => [d.date, d]));
+    const n = Number(days);
+    const out: (DailyStat & { label: string })[] = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const date = tDate(Date.now() - i * DAY);
+      const d = by.get(date) ?? { date, open: 0, view: 0, apply: 0, accept: 0 };
+      out.push({ ...d, label: `${date.slice(8)}.${date.slice(5, 7)}` });
+    }
+    return out;
+  }, [dailyStats, days]);
+
+  const sourceRows = useMemo(
+    () =>
+      [...sources]
+        .sort((a, b) => b.users - a.users || b.apps - a.apps)
+        .map((x) => ({
+          ...x,
+          label: x.source.startsWith("src_") ? x.source.slice(4) : `QR: ${clean(centers?.find((c) => c.id === x.source.slice(2))?.name ?? x.source.slice(2))}`
+        })),
+    [sources, centers]
+  );
+
+  const stale = useMemo(
+    () =>
+      (centers ?? [])
+        .filter((c) => c.approved && !!c.ownerTgId && !c.hidden && (c.updatedMs || 0) < Date.now() - STALE_DAYS * DAY)
+        .sort((a, b) => a.updatedMs - b.updatedMs),
+    [centers]
+  );
+
+  const remindAll = async () => {
+    if (!api || !stale.length) return;
+    if (!confirm(`${stale.length} ta markaz egasiga «ma’lumotni yangilang» eslatmasi yuborilsinmi?`)) return;
+    setReminding(true);
+    try {
+      await api.remindStale();
+      haptic.success();
+      showToast(`Eslatma ${stale.length} ta markazga yuborilmoqda — natija botda`, "ok");
+    } catch {
+      showToast("Yuborib bo‘lmadi (ruxsat yoki internet)", "error");
+    } finally {
+      setReminding(false);
+    }
+  };
 
   const setCenter = async (c: AdminCenter, status: "approved" | "rejected", vip: boolean) => {
     if (!api) return;
@@ -377,6 +448,7 @@ export default function AdminApp() {
 
   const TABS: { id: Tab; label: string; icon: ReactNode; badge?: number }[] = [
     { id: "overview", label: "Umumiy", icon: <BarChart3 size={18} /> },
+    { id: "analytics", label: "Analitika", icon: <TrendingUp size={18} /> },
     { id: "centers", label: "Markazlar", icon: <Building2 size={18} />, badge: stats.pending.length },
     { id: "apps", label: "Arizalar", icon: <ClipboardList size={18} /> },
     { id: "logs", label: "Xatolar", icon: <AlertTriangle size={18} />, badge: stats.errors24 }
@@ -494,6 +566,89 @@ export default function AdminApp() {
                   <HBars data={topCenters} />
                 </Card>
               </div>
+            </div>
+          ) : tab === "analytics" ? (
+            <div className="space-y-4">
+              <Card title={`Voronka · ${days} kun`} right={<span className="text-footnote text-ink3">qurilma/kun bo‘yicha</span>}>
+                <HBars
+                  data={[
+                    { key: "open", label: "Ilova ochildi", value: funnel.open },
+                    { key: "view", label: "Markaz ko‘rildi", value: funnel.view },
+                    { key: "apply", label: "Ariza yuborildi", value: funnel.apply },
+                    { key: "accept", label: "Qabul qilindi", value: funnel.accept }
+                  ]}
+                />
+                <div className="tnum mt-3 grid grid-cols-3 gap-2 text-center text-footnote">
+                  {(
+                    [
+                      [pct(funnel.view, funnel.open), "ochildi → ko‘rdi"],
+                      [pct(funnel.apply, funnel.view), "ko‘rdi → ariza"],
+                      [pct(funnel.accept, funnel.apply), "ariza → qabul"]
+                    ] as const
+                  ).map(([v, l]) => (
+                    <div key={l} className="rounded-[12px] bg-card2 p-2">
+                      <div className="text-headline">{v}</div>
+                      <div className="text-ink2">{l}</div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              <Card title="Ilova ochilishi — kunlar bo‘yicha" right={<span className="tnum text-footnote text-ink3">jami {funnel.open}</span>}>
+                <BarChart data={funnelDaily.map((d) => ({ key: d.date, label: d.label, value: d.open }))} labelEvery={days === "7" ? 1 : days === "30" ? 7 : 15} />
+                <TableView head={["Kun", "Ochildi", "Ko‘rildi", "Ariza", "Qabul"]} rows={funnelDaily.map((d) => [d.label, d.open, d.view, d.apply, d.accept])} />
+              </Card>
+
+              <Card title="Manbalar" right={<span className="text-footnote text-ink3">/link kanal · markaz QR’i</span>}>
+                {sourceRows.length ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[420px] text-subhead">
+                      <thead>
+                        <tr className="text-left text-footnote text-ink2">
+                          <th className="py-2 pr-3 font-semibold">Manba</th>
+                          <th className="py-2 pr-3 text-right font-semibold">Foydalanuvchi</th>
+                          <th className="py-2 pr-3 text-right font-semibold">Ariza</th>
+                          <th className="py-2 text-right font-semibold">Konversiya</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sourceRows.map((x) => (
+                          <tr key={x.source} className="[box-shadow:inset_0_0.5px_0_var(--sep)]">
+                            <td className="py-2.5 pr-3 font-medium">{x.label}</td>
+                            <td className="tnum py-2.5 pr-3 text-right">{x.users}</td>
+                            <td className="tnum py-2.5 pr-3 text-right">{x.apps}</td>
+                            <td className="tnum py-2.5 text-right text-ink2">{pct(x.apps, x.users)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <EmptyState kind="search" text="Hali manba yo‘q. Botda /link flyer bilan kampaniya havolasini yarating." />
+                )}
+              </Card>
+
+              <Card
+                title={`Yangilanmagan markazlar · ${STALE_DAYS}+ kun`}
+                right={
+                  <Button size="md" kind="tinted" disabled={!stale.length} loading={reminding} onClick={remindAll}>
+                    <BellRing size={17} aria-hidden /> Hammasiga eslatma ({stale.length})
+                  </Button>
+                }
+              >
+                {stale.length ? (
+                  <ul className="space-y-2">
+                    {stale.map((c) => (
+                      <li key={c.id} className="flex items-center justify-between gap-3 rounded-[12px] bg-card2 px-3 py-2.5">
+                        <span className="min-w-0 truncate text-subhead font-medium">{clean(c.name)}</span>
+                        <span className="tnum shrink-0 text-footnote text-ink2">{c.updatedMs ? `${Math.floor((Date.now() - c.updatedMs) / DAY)} kun oldin` : "hech qachon"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <EmptyState kind="search" title="Hammasi yangi" text={`${STALE_DAYS} kundan eski ma’lumotli markaz yo‘q`} />
+                )}
+              </Card>
             </div>
           ) : tab === "centers" ? (
             <Card>

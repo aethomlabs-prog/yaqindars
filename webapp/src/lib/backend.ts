@@ -56,6 +56,20 @@ export interface QuickCenterInput {
   subjects: string[];
   price: number;
 }
+/** Kunlik voronka: ilova ochildi (qurilma/kun) → markaz ko‘rildi → ariza → qabul */
+export interface DailyStat {
+  date: string;
+  open: number;
+  view: number;
+  apply: number;
+  accept: number;
+}
+/** Manba (src_<kanal> yoki c_<markazId>): kelgan foydalanuvchilar va arizalar */
+export interface SourceStat {
+  source: string;
+  users: number;
+  apps: number;
+}
 export interface AdminCounts {
   chats: number;
   waitlist: number;
@@ -71,6 +85,11 @@ export interface AdminApi {
   setCenter(c: AdminCenter, patch: { status: "approved" | "rejected"; vip: boolean }): Promise<void>;
   /** To‘lov qabul qilindi: muddatni +months oyga uzaytiradi (yangi paidUntilMs ni qaytaradi) */
   markPaid(c: AdminCenter, months: number): Promise<number>;
+  /** sinceDate (YYYY-MM-DD) dan beri kunlik voronka */
+  loadDaily(sinceDate: string): Promise<DailyStat[]>;
+  loadSources(): Promise<SourceStat[]>;
+  /** 14+ kun yangilanmagan markaz egalariga bot orqali eslatma */
+  remindStale(): Promise<void>;
   /** Tez qo‘shish: egasiz markaz (source: "admin", claimed: false) — yangi ID */
   addCenter(input: QuickCenterInput): Promise<string>;
 }

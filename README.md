@@ -368,6 +368,18 @@ Har push’da Railway/Render botni o‘zi qayta joylaydi. Xatolar loglarda va Fi
 
 ---
 
+## Admin analitikasi (admin panel → «Analitika»)
+
+- **Voronka** — ilova ochildi (qurilma/kun) → markaz ko‘rildi → ariza → qabul, tanlangan davr (7/30/90 kun) uchun
+  konversiyalar va kunlik grafik. Ma’lumot `dailyStats/<sana>` kunlik hisoblagichlarida: `open`, `view` ni ilova,
+  `apply`, `accept` ni bot yozadi (har hodisa alohida hujjat emas).
+- **Manbalar** — `src_<kanal>` (`/link flyer`) va `c_<markazId>` (markaz QR’i): kelgan foydalanuvchilar (qurilmada bir marta)
+  va arizalar, konversiya. `sourceStats/<manba>`.
+- **Yangilanmagan markazlar** — 14+ kun yangilanmaganlar ro‘yxati va «Hammasiga eslatma»: bot har biriga
+  «✅ Hammasi to‘g‘ri / ✏️ Kabinetda yangilash» tugmalari bilan yozadi, natija sonini adminga yuboradi.
+
+---
+
 ## Firestore indekslari (`firestore.indexes.json`)
 
 Ilova va botdagi **barcha** so‘rovlar bitta maydonli (tenglik, bitta diapazon yoki bitta `orderBy`) — ular uchun
@@ -426,3 +438,5 @@ Har relizdan oldin **ikkala** telefonda o‘ting. Muammo bo‘lsa, ilovani `?deb
 | 24 | Kabinetda shu fandagi guruhga ➕ joy (0 → 1) | Kuzatuvchi ota-onaga «Siz kutgan joy ochildi!» (kuniga ≤ 3) | ☐ | ☐ |
 | 25 | Qabul qilingan arizaning sinov vaqtidan 3 soat o‘tgach | Bot «Dars yoqdimi?» 1–5 ⭐; ikkinchi bosish — «allaqachon baholagansiz» | ☐ | ☐ |
 | 26 | Istalgan chatda `@yaqindars_bot ingliz` | Markazlar kartochkalari, «📱 Ochish» ilovani markaz sahifasida ochadi | ☐ | ☐ |
+| 27 | Admin panel → «Analitika» | Voronka (4 qadam, %), kunlik grafik, Manbalar jadvali, yangilanmagan markazlar | ☐ | ☐ |
+| 28 | «Hammasiga eslatma» | Eskirgan markaz egalariga xabar; adminga «N ta egaga eslatma yuborildi» | ☐ | ☐ |
