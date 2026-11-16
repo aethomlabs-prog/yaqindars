@@ -42,6 +42,11 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paidUntil', 'updatedAt', 'hidden'])
         && request.resource.data.paidUntil is timestamp
         && request.resource.data.get('hidden', false) == false;
+      // Admin: «✓ Tasdiqlangan» belgisi (manzil, telefon va faoliyat tekshirilgan)
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verified', 'verifiedAt', 'updatedAt'])
+        && request.resource.data.verified is bool
+        && (request.resource.data.verifiedAt == null || request.resource.data.verifiedAt == request.time);
       // Admin: tez qo'shish — egasiz markaz («Ma'lumot tasdiqlanmagan»)
       allow create: if isAdmin()
         && request.resource.data.source == 'admin'
@@ -78,6 +83,22 @@ service cloud.firestore {
       // Rad etilgan so'rovni qayta yuborish mumkin
       allow update: if resource.data.status == 'rejected' && validClaim(request.resource.data);
       allow delete: if false;
+    }
+
+    // «Ma'lumot noto'g'ri» shikoyati. ID = "<tgId>_<markazId>_<sana>" — kuniga bir markazga bitta.
+    // Yuborgan foydalanuvchi o'zinikini, admin hammasini ko'radi; holatni bot o'zgartiradi.
+    match /reports/{id} {
+      allow read: if isTg(resource.data.tgId) || isAdmin();
+      allow create: if isTg(request.resource.data.tgId)
+        && id.matches('^' + string(tg()) + '_' + request.resource.data.centerId + '_20[0-9]{2}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.keys().hasOnly(['centerId', 'centerName', 'reason', 'comment', 'tgId', 'status', 'createdAt'])
+        && request.resource.data.centerId is string && request.resource.data.centerId.size() > 0 && request.resource.data.centerId.size() <= 64
+        && request.resource.data.centerName is string && request.resource.data.centerName.size() <= 100
+        && request.resource.data.reason in ['price', 'seats', 'contact', 'closed', 'other']
+        && request.resource.data.comment is string && request.resource.data.comment.size() <= 300
+        && request.resource.data.status == 'new'
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
     }
 
     // Admin bergan bir martalik kodlar (/claimcode) — faqat bot

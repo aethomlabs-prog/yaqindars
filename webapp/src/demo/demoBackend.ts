@@ -189,6 +189,10 @@ export function createDemoBackend(): Backend {
       if (x) x.paidUntilMs = until;
       return until;
     },
+    async setVerified(c, on) {
+      const x = adminCenters.find((y) => y.id === c.id);
+      if (x) Object.assign(x, { verified: on, verifiedMs: on ? Date.now() : null });
+    },
     async loadDaily(sinceDate) {
       const out = [];
       for (let d = 29; d >= 0; d--) {
@@ -216,7 +220,7 @@ export function createDemoBackend(): Backend {
       const id = `quick${adminCenters.length}`;
       adminCenters.unshift({
         id, name: input.name, address: "Xaritada ko‘rsatilgan", lat: input.lat, lng: input.lng, phone: input.phone, amenities: [], vip: false,
-        rating: null, reviewsCount: 0, description: "", ageFrom: null, ageTo: null, photoUrl: null, kind: "center", teachers: [], claimed: false,
+        rating: null, reviewsCount: 0, description: "", ageFrom: null, ageTo: null, photoUrl: null, kind: "center", teachers: [], claimed: false, verified: false, verifiedMs: null,
         groups: (input.subjects.length ? input.subjects : ["Boshqa"]).map((subject) => ({ subject, days: [], time: "", price: input.price, freeSeats: 0 })),
         updatedMs: Date.now(), approved: true, tariff: null, ownerTgId: null, ownerUsername: null, createdMs: Date.now(), paidUntilMs: null
       });
@@ -264,6 +268,9 @@ export function createDemoBackend(): Backend {
     async deleteWatch(id) {
       watches = watches.filter((w) => w.id !== id);
       saveWatches();
+    },
+    async reportCenter() {
+      await new Promise((r) => setTimeout(r, 400));
     },
     async requestClaim() {
       await new Promise((r) => setTimeout(r, 400));

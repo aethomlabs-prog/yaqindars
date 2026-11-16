@@ -20,6 +20,7 @@ import {
   Star,
   Wallet,
   Banknote,
+  BadgeCheck,
   BellRing,
   Copy,
   Plus,
@@ -110,13 +111,15 @@ function CenterRow({
   appsCount,
   busy,
   onSet,
-  onPaid
+  onPaid,
+  onVerify
 }: {
   c: AdminCenter;
   appsCount: number;
   busy: boolean;
   onSet: (status: "approved" | "rejected", vip: boolean) => void;
   onPaid: () => void;
+  onVerify: () => void;
 }) {
   const free = c.groups.reduce((s, g) => s + g.freeSeats, 0);
   const ownerless = !c.ownerTgId;
@@ -142,6 +145,11 @@ function CenterRow({
               <BillingChip c={c} />
             )}
             {c.hidden && <span className="inline-flex items-center rounded-full bg-red-soft px-2 py-0.5 text-caption text-red-text">Yashirilgan</span>}
+            {c.verified && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-green-soft px-2 py-0.5 text-caption text-green-text">
+                <BadgeCheck size={12} aria-hidden /> Tasdiqlangan
+              </span>
+            )}
             {!c.approved && (
               <span className="inline-flex items-center gap-1 rounded-full bg-gold-soft px-2 py-0.5 text-caption text-gold-text">
                 <Hourglass size={12} aria-hidden /> Kutilmoqda
@@ -176,11 +184,19 @@ function CenterRow({
             </Button>
           </>
         ) : ownerless ? (
-          <Button kind="tinted" size="md" onClick={copyCode}>
-            <Copy size={17} aria-hidden /> Egasi uchun kod
-          </Button>
+          <>
+            <Button kind={c.verified ? "gray" : "tinted"} size="md" disabled={busy} onClick={onVerify}>
+              <BadgeCheck size={17} aria-hidden /> {c.verified ? "Tasdiqni olish" : "Tasdiqlash ✓"}
+            </Button>
+            <Button kind="tinted" size="md" onClick={copyCode}>
+              <Copy size={17} aria-hidden /> Egasi uchun kod
+            </Button>
+          </>
         ) : (
           <>
+            <Button kind={c.verified ? "gray" : "tinted"} size="md" disabled={busy} onClick={onVerify}>
+              <BadgeCheck size={17} aria-hidden /> {c.verified ? "Tasdiqni olish" : "Tasdiqlash ✓"}
+            </Button>
             <Button kind="green" size="md" disabled={busy} onClick={onPaid}>
               <Banknote size={17} aria-hidden /> To‘lov +1 oy
             </Button>
@@ -373,6 +389,24 @@ export default function AdminApp() {
     }
   };
 
+  const verify = async (c: AdminCenter) => {
+    if (!api) return;
+    const on = !c.verified;
+    if (!confirm(on ? `«${clean(c.name)}»: manzil, telefon va faoliyat tekshirildimi? «✓ Tasdiqlangan» belgisi qo‘yiladi.` : `«${clean(c.name)}» dan «Tasdiqlangan» belgisi olinsinmi?`)) return;
+    setBusyId(c.id);
+    try {
+      await api.setVerified(c, on);
+      haptic.success();
+      showToast(on ? "«✓ Tasdiqlangan» belgisi qo‘yildi" : "Belgi olib tashlandi", "ok");
+      setCenters((cs) => cs!.map((x) => (x.id === c.id ? { ...x, verified: on, verifiedMs: on ? Date.now() : null } : x)));
+    } catch (e) {
+      console.error(e);
+      showToast("Saqlanmadi (ruxsat yoki internet)", "error");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const markPaid = async (c: AdminCenter) => {
     if (!api) return;
     const b = billingOf(c);
@@ -542,7 +576,7 @@ export default function AdminApp() {
                 <Card title={`Tasdiqlash navbati · ${stats.pending.length}`}>
                   <div className="space-y-2.5">
                     {stats.pending.map((c) => (
-                      <CenterRow key={c.id} c={c} appsCount={appsByCenter.get(c.id) ?? 0} busy={busyId === c.id} onSet={(st, vip) => setCenter(c, st, vip)} onPaid={() => markPaid(c)} />
+                      <CenterRow key={c.id} c={c} appsCount={appsByCenter.get(c.id) ?? 0} busy={busyId === c.id} onSet={(st, vip) => setCenter(c, st, vip)} onPaid={() => markPaid(c)} onVerify={() => verify(c)} />
                     ))}
                   </div>
                 </Card>
@@ -676,7 +710,7 @@ export default function AdminApp() {
               </div>
               <div className="space-y-2.5">
                 {filteredCenters.length ? (
-                  filteredCenters.map((c) => <CenterRow key={c.id} c={c} appsCount={appsByCenter.get(c.id) ?? 0} busy={busyId === c.id} onSet={(st, vip) => setCenter(c, st, vip)} onPaid={() => markPaid(c)} />)
+                  filteredCenters.map((c) => <CenterRow key={c.id} c={c} appsCount={appsByCenter.get(c.id) ?? 0} busy={busyId === c.id} onSet={(st, vip) => setCenter(c, st, vip)} onPaid={() => markPaid(c)} onVerify={() => verify(c)} />)
                 ) : (
                   <EmptyState kind="search" text="Bu filtr bo‘yicha markaz yo‘q" />
                 )}

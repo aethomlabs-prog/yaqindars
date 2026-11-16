@@ -4,7 +4,7 @@ import type { Center, Chat, Message, Review } from "../lib/types";
 const DAY = 86400000;
 const now = Date.now();
 
-type Raw = Omit<Center, "reviewsCount" | "photoUrl" | "kind" | "updatedMs" | "description" | "ageFrom" | "ageTo" | "teachers" | "claimed"> &
+type Raw = Omit<Center, "reviewsCount" | "photoUrl" | "kind" | "updatedMs" | "description" | "ageFrom" | "ageTo" | "teachers" | "claimed" | "verified" | "verifiedMs"> &
   Partial<Center> & { age?: number };
 
 function c(x: Raw & { daysOld: number }): Center {
@@ -17,6 +17,8 @@ function c(x: Raw & { daysOld: number }): Center {
     ageTo: null,
     teachers: [],
     claimed: true,
+    verified: ["demo1", "demo6", "demo9"].includes(x.id),
+    verifiedMs: now - 20 * DAY,
     ...x,
     updatedMs: now - x.daysOld * DAY
   };

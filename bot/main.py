@@ -1166,6 +1166,7 @@ def delete_user_data(tg_id: int) -> dict:
     out["kuzatuvlar"] = _delete_query(WATCHES.where(filter=FieldFilter("userTgId", "==", tg_id)))
     # Baholar: shaxsiy yozuv (izoh) o'chadi; markazning umumiy o'rtachasi anonim qoladi
     out["baholar"] = _delete_query(RATINGS.where(filter=FieldFilter("userTgId", "==", tg_id)))
+    out["shikoyatlar"] = _delete_query(REPORTS.where(filter=FieldFilter("tgId", "==", tg_id)))
     # Telegram bog'lanishi: claim'ni olib tashlaymiz (anonim akkaunt boshqa hech narsani ko'ra olmaydi)
     for link in LINKS.where(filter=FieldFilter("tg", "==", tg_id)).stream():
         try:
@@ -2645,6 +2646,63 @@ async def on_inline(query: InlineQuery):
         log.exception("Inline so'rov xatosi")
 
 
+# ======================= Ishonch: «Ma'lumot noto'g'ri» shikoyatlari =======================
+REPORTS = db.collection("reports")
+REPORT_REASONS = {
+    "price": "Narx noto‘g‘ri",
+    "seats": "Bo‘sh joy haqidagi ma’lumot noto‘g‘ri",
+    "contact": "Manzil yoki telefon noto‘g‘ri",
+    "closed": "Markaz yopilgan / ishlamaydi",
+    "other": "Boshqa",
+}
+
+
+async def process_report(bot: Bot, ref):
+    rep = await claim_if(ref, lambda d: d.get("status") == "new" and not d.get("notified"), {"notified": True})
+    if not rep:
+        return
+    center = await get_center(str(rep.get("centerId", "")))
+    c = as_dict(center) if center else {}
+    owner = c.get("ownerUsername")
+    owner_line = f"@{escape(str(owner))}" if owner else ("egasi yo‘q" if not c.get("ownerTgId") else f"<code>{c.get('ownerTgId')}</code>")
+    comment = f"\n💬 «{escape(str(rep.get('comment')))}»" if rep.get("comment") else ""
+    text = (
+        "⚠️ <b>Ma’lumot noto‘g‘ri — shikoyat</b>\n\n"
+        f"🏫 {escape(clean_name(c.get('name') or rep.get('centerName')))}\n"
+        f"❗ {escape(REPORT_REASONS.get(str(rep.get('reason')), 'Boshqa'))}{comment}\n\n"
+        f"☎️ Markaz: {escape(str(c.get('phone', '—')))} · egasi: {owner_line}\n"
+        f"👤 Yuborgan: <code>{rep.get('tgId')}</code>\nID: <code>{rep.get('centerId')}</code>"
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ Ko‘rib chiqildi", callback_data=f"rv:{ref.id}", style="success")]])
+    await notify_admins(bot, text, reply_markup=kb)
+
+
+@router.callback_query(F.data.startswith("rv:"))
+async def report_reviewed(call: CallbackQuery, bot: Bot):
+    if not is_admin(call.from_user.id):
+        return await call.answer()
+    rid = call.data.split(":", 1)[1]
+    if "/" in rid:
+        return await call.answer()
+    rep = await claim_if(REPORTS.document(rid), lambda d: d.get("status") == "new", {"status": "reviewed", "reviewedAt": firestore.SERVER_TIMESTAMP})
+    try:
+        await call.message.edit_text(call.message.html_text + "\n\n<b>✅ Ko‘rib chiqildi</b>")
+    except (TelegramBadRequest, AttributeError):
+        pass
+    await call.answer("Belgilandi")
+    if rep:
+        await notify_user(bot, rep.get("tgId"), f"✅ «{escape(clean_name(rep.get('centerName')))}» haqidagi xabaringiz ko‘rib chiqildi. Rahmat!", open_app=False)
+
+
+def start_report_watcher(bot: Bot, loop: asyncio.AbstractEventLoop):
+    def on_snapshot(_docs, changes, _read_time):
+        for ch in changes:
+            if ch.type.name == "ADDED":
+                asyncio.run_coroutine_threadsafe(process_report(bot, ch.document.reference), loop)
+
+    return REPORTS.where(filter=FieldFilter("status", "==", "new")).on_snapshot(on_snapshot)
+
+
 # ---------------- Adminlarga xabar ----------------
 async def notify_admins(bot: Bot, text: str, **kw):
     for admin in ADMIN_IDS:
@@ -2796,6 +2854,7 @@ async def main():
         "markaz tasdiqlash": lambda: start_approval_watcher(bot, loop),
         "egallash so'rovlari": lambda: start_claim_watcher(bot, loop),
         "bot so'rovlari (QR)": lambda: start_botreq_watcher(bot, loop),
+        "shikoyatlar": lambda: start_report_watcher(bot, loop),
     }
     if GROQ_API_KEY:
         factories["AI"] = lambda: start_ai_watcher(loop)

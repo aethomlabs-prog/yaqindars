@@ -16,6 +16,7 @@ import type { Review } from "../../lib/types";
 import { IS_DEMO, useApp, useCenter, useOrigin, useProfile, useBotUsername } from "../../store/app";
 import { useNav } from "../../store/nav";
 import { ApplySheet } from "./ApplySheet";
+import { ReportSheet, VerifiedBadge, VerifiedSheet } from "./TrustSheets";
 
 function Action({ icon, label, onClick, href, active }: { icon: ReactNode; label: string; onClick?: () => void; href?: string; active?: boolean }) {
   const cls = `focus-ring pressable flex flex-1 flex-col items-center gap-1 rounded-[14px] bg-card py-2.5 text-caption ${active ? "text-[#FF3B30]" : "text-tint"}`;
@@ -69,6 +70,8 @@ export function CenterPage({ centerId }: { centerId: string }) {
   const [waiting, setWaiting] = useState<Set<number>>(new Set());
   const [chatBusy, setChatBusy] = useState(false);
   const [claimState, setClaimState] = useState<"idle" | "busy" | "sent">("idle");
+  const [trustOpen, setTrustOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   // Ko‘rishlar hisobi (egasining haftalik hisoboti uchun; sessiyada bir marta)
   useEffect(() => {
@@ -220,6 +223,7 @@ export function CenterPage({ centerId }: { centerId: string }) {
           <h1 className="mt-3 text-title">{c.name}</h1>
           <div className="mt-1.5 flex flex-wrap items-center justify-center gap-2 text-footnote text-ink2">
             {c.vip && <VipBadge large />}
+            {c.verified && <VerifiedBadge large onClick={() => setTrustOpen(true)} />}
             {!c.claimed && <UnverifiedBadge large />}
             <span>{c.kind === "tutor" ? "Repetitor" : "O‘quv markazi"}</span>
             {c.rating ? <Rating value={c.rating} count={c.reviewsCount} /> : <span className="rounded-full bg-green-soft px-2 py-0.5 text-caption font-semibold text-green-text">Yangi</span>}
@@ -388,6 +392,12 @@ export function CenterPage({ centerId }: { centerId: string }) {
           </div>
         )}
 
+        <div className="mt-6 flex justify-center">
+          <button onClick={() => setReportOpen(true)} className="focus-ring flex min-h-[44px] items-center gap-1.5 px-4 text-footnote text-ink2">
+            <AlertTriangle size={15} aria-hidden /> Ma’lumot noto‘g‘ri?
+          </button>
+        </div>
+
         {/* Sharhlar */}
         {IS_DEMO && reviews && reviews.length > 0 && (
           <>
@@ -412,6 +422,8 @@ export function CenterPage({ centerId }: { centerId: string }) {
       </div>
 
       <ApplySheet center={c} groupIndex={apply ?? lastGi} open={apply !== null} onClose={() => setApply(null)} />
+      <VerifiedSheet center={c} open={trustOpen} onClose={() => setTrustOpen(false)} />
+      <ReportSheet center={c} open={reportOpen} onClose={() => setReportOpen(false)} />
     </Page>
   );
 }

@@ -380,6 +380,16 @@ Har push’da Railway/Render botni o‘zi qayta joylaydi. Xatolar loglarda va Fi
 
 ---
 
+## Ishonch: «✓ Tasdiqlangan» va «Ma’lumot noto‘g‘ri»
+
+- **«✓ Tasdiqlangan»** — admin panel → Markazlar → «Tasdiqlash ✓» (manzil, telefon va faoliyat tekshirilgach).
+  `verified: true`, `verifiedAt`. Ilovada yashil belgi; bosilsa nimani anglatishi tushuntiriladi. «Tasdiqni olish» bilan qaytariladi.
+- **«Ma’lumot noto‘g‘ri?»** — markaz sahifasi oxirida: sabab (narx, bo‘sh joy, manzil/telefon, yopilgan, boshqa) + izoh →
+  `reports` → bot adminga markaz telefoni va egasi bilan yuboradi, «✅ Ko‘rib chiqildi» bosilsa yuborgan odamga rahmat xabari.
+  Bitta foydalanuvchi bitta markaz haqida kuniga bitta shikoyat.
+
+---
+
 ## Firestore indekslari (`firestore.indexes.json`)
 
 Ilova va botdagi **barcha** so‘rovlar bitta maydonli (tenglik, bitta diapazon yoki bitta `orderBy`) — ular uchun
@@ -440,3 +450,5 @@ Har relizdan oldin **ikkala** telefonda o‘ting. Muammo bo‘lsa, ilovani `?deb
 | 26 | Istalgan chatda `@yaqindars_bot ingliz` | Markazlar kartochkalari, «📱 Ochish» ilovani markaz sahifasida ochadi | ☐ | ☐ |
 | 27 | Admin panel → «Analitika» | Voronka (4 qadam, %), kunlik grafik, Manbalar jadvali, yangilanmagan markazlar | ☐ | ☐ |
 | 28 | «Hammasiga eslatma» | Eskirgan markaz egalariga xabar; adminga «N ta egaga eslatma yuborildi» | ☐ | ☐ |
+| 29 | Admin: Markazlar → «Tasdiqlash ✓» | Ilovada markazda yashil «Tasdiqlangan»; bosilsa izoh oynasi | ☐ | ☐ |
+| 30 | Markaz → «Ma’lumot noto‘g‘ri?» → sabab → «Adminga yuborish» | Adminga shikoyat; «Ko‘rib chiqildi» → yuborganga «Rahmat» | ☐ | ☐ |

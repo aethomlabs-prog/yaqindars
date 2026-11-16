@@ -38,6 +38,9 @@ export interface Center {
   updatedMs: number;
   /** false — admin qo‘shgan, egasi hali yo‘q («Ma’lumot tasdiqlanmagan») */
   claimed: boolean;
+  /** «✓ Tasdiqlangan»: admin manzil, telefon va faoliyatni tekshirgan */
+  verified: boolean;
+  verifiedMs: number | null;
 }
 
 export type AppStatus = "new" | "seen" | "accepted" | "rejected";

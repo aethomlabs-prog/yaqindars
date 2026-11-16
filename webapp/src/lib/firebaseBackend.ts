@@ -77,7 +77,9 @@ function toCenter(id: string, d: DocumentData): Center {
       about: str(t.about, 120)
     })),
     updatedMs: ms(d.updatedAt),
-    claimed: d.claimed !== false
+    claimed: d.claimed !== false,
+    verified: d.verified === true,
+    verifiedMs: ms(d.verifiedAt) || null
   };
 }
 
@@ -335,6 +337,9 @@ export async function createFirebaseBackend(): Promise<Backend> {
           await updateDoc(doc(db, "centers", c.id), { paidUntil: Timestamp.fromMillis(until), updatedAt: serverTimestamp(), ...(c.hidden ? { hidden: false } : {}) });
           return until;
         },
+        async setVerified(c, on) {
+          await updateDoc(doc(db, "centers", c.id), { verified: on, verifiedAt: on ? serverTimestamp() : null, updatedAt: serverTimestamp() });
+        },
         async loadDaily(sinceDate) {
           const snap = await getDocs(query(collection(db, "dailyStats"), where("date", ">=", sinceDate)));
           return snap.docs.map((d): DailyStat => {
@@ -491,6 +496,19 @@ export async function createFirebaseBackend(): Promise<Backend> {
     async deleteWatch(id) {
       need();
       await deleteDoc(doc(db, "watches", id));
+    },
+    async reportCenter(center, reason, comment) {
+      const u = need();
+      // Bitta foydalanuvchi bitta markaz haqida kuniga bitta shikoyat (ID shuni ta’minlaydi)
+      await setDoc(doc(db, "reports", `${u}_${center.id}_${tashkentDate()}`), {
+        centerId: center.id,
+        centerName: center.name.slice(0, 100),
+        reason,
+        comment: comment.slice(0, 300),
+        tgId,
+        status: "new",
+        createdAt: serverTimestamp()
+      });
     },
     async requestClaim(center) {
       const u = need();

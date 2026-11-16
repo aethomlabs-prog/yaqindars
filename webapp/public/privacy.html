@@ -83,8 +83,12 @@
           <tr><td>Ariza: ism, telefon, guruh, izoh</td><td>Markaz siz bilan bog‘lanib, sinov darsini belgilashi uchun</td></tr>
           <tr><td>Farzandlar: ism, yosh, sinf, qiziqishlar</td><td>Arizani tez to‘ldirish va mos markazlarni ko‘rsatish (ixtiyoriy)</td></tr>
           <tr><td>Saqlangan manzillar (Uy, Maktab…)</td><td>Markazgacha masofani hisoblash (ixtiyoriy)</td></tr>
-          <tr><td>Joriy joylashuv</td><td>Faqat qurilmangizda masofani hisoblash uchun ishlatiladi, serverga yuborilmaydi</td></tr>
+          <tr><td>Joriy joylashuv</td><td>Asosan qurilmangizda masofani hisoblash uchun ishlatiladi. Serverga faqat ikki holatda boradi: AI yordamchiga savol berganda (yaqin markazlarni topish uchun) va «Shunday joy ochilsa xabar ber» ni bosganda (qidiruv nuqtasi sifatida saqlanadi)</td></tr>
           <tr><td>AI yordamchiga yozilgan savollar</td><td>Mos markazni topish uchun AI xizmatiga (Groq) yuboriladi — ism yoki telefon yuborilmaydi</td></tr>
+          <tr><td>Saqlangan qidiruvlar (fan, masofa, narx, kunlar, qidiruv nuqtasi)</td><td>Mos bo‘sh joy ochilganda Telegram’da xabar berish (kuniga 3 tagacha)</td></tr>
+          <tr><td>Sinov darsiga bahoyingiz va izohingiz</td><td>Markazning umumiy reytingini hisoblash (kamida 3 ta baho bo‘lsa, faqat o‘rtacha ko‘rsatiladi; ismingiz ko‘rsatilmaydi)</td></tr>
+          <tr><td>«Ma’lumot noto‘g‘ri» xabarlari</td><td>Markaz ma’lumotini tekshirib to‘g‘rilash. Faqat administratorga ko‘rinadi</td></tr>
+          <tr><td>Umumiy statistika (markaz ko‘rilgan, qo‘ng‘iroq/yo‘l bosilgan, ilova ochilgan kunlar soni, qaysi havoladan kelgansiz)</td><td>Markazlarga haftalik hisobot va xizmatni yaxshilash. Faqat kunlik umumiy sonlar saqlanadi — kim nima qilgani yozilmaydi</td></tr>
           <tr><td>Markaz bilan chat xabarlari</td><td>Xabarni markazga yetkazish va javobni sizga ko‘rsatish</td></tr>
           <tr><td>Saqlanganlar, bildirishnoma sozlamalari, mavzu</td><td>Ilovani sizga moslash</td></tr>
           <tr><td>Texnik xato yozuvlari (vaqt, ekran, qurilma turi, xato matni)</td><td>Xatolarni topish va tuzatish. Ular faqat administratorga ko‘rinadi</td></tr>
@@ -106,7 +110,8 @@
         <h2>Qancha saqlaymiz</h2>
         <ul>
           <li>Arizalar — yuborilgan kundan boshlab <b>12 oy</b>, keyin avtomatik o‘chiriladi.</li>
-          <li>Profil, farzandlar, manzillar, saqlanganlar va chatlar — siz o‘chirmaguningizcha.</li>
+          <li>Profil, farzandlar, manzillar, saqlanganlar, kuzatuvlar, baholar va chatlar — siz o‘chirmaguningizcha.</li>
+          <li>Zaxira nusxalar — administratorning Telegram’ida; o‘chirish so‘rovingizdan keyin ham eski nusxalarda bir muddat qolishi mumkin, ulardan faqat buzilgan bazani tiklash uchun foydalaniladi.</li>
           <li>Texnik xato yozuvlari — muammo tuzatilguncha, ko‘pi bilan 90 kun.</li>
           <li>AI yordamchiga yozilgan savollar — 1 kun.</li>
         </ul>
@@ -115,7 +120,7 @@
       <section>
         <h2>Sizning huquqlaringiz</h2>
         <ul>
-          <li><b>Hammasini o‘chirish:</b> ilovada Profil → «Ma’lumotlarimni o‘chirish» yoki botda <b>/delete</b>. Profil, farzandlar, arizalar, chatlar va saqlanganlar darhol o‘chadi.</li>
+          <li><b>Hammasini o‘chirish:</b> ilovada Profil → «Ma’lumotlarimni o‘chirish» yoki botda <b>/delete</b>. Profil, farzandlar, arizalar, chatlar, saqlanganlar, kuzatuvlar, baholar va «Ma’lumot noto‘g‘ri» xabarlaringiz darhol o‘chadi (markazning umumiy o‘rtacha bahosi anonim qoladi).</li>
           <li><b>Bildirishnomalardan voz kechish:</b> Profil → Bildirishnomalar.</li>
           <li><b>Joylashuvni bermaslik:</b> ilova joylashuvsiz ham ishlaydi — masofa Rishton markazidan hisoblanadi.</li>
           <li><b>Savol yoki shikoyat:</b> botda «💬 Admin bilan bog‘lanish».</li>

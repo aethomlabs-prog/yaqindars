@@ -7,6 +7,7 @@ import { Avatar, VipBadge } from "./ios/controls";
 import { SeatChip } from "./motion";
 import { listItem } from "./ios/motion";
 import { SubjectIcon } from "./brand";
+import { BadgeCheck } from "lucide-react";
 
 export function Rating({ value, count }: { value: number | null; count?: number }) {
   if (!value) return null;
@@ -42,6 +43,7 @@ export function CenterRow({ c, km, free, minPrice, subjects, i = 0, onOpen }: { 
         <div className="flex items-center gap-2">
           <span className="truncate text-headline">{c.name}</span>
           {c.vip && <VipBadge />}
+          {c.verified && <BadgeCheck size={16} className="shrink-0 text-green-text" aria-label="Tasdiqlangan" />}
           {!c.claimed && <UnverifiedBadge />}
         </div>
         <div className="mt-0.5 truncate text-footnote text-ink2">

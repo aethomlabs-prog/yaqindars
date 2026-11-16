@@ -90,6 +90,8 @@ export interface AdminApi {
   loadSources(): Promise<SourceStat[]>;
   /** 14+ kun yangilanmagan markaz egalariga bot orqali eslatma */
   remindStale(): Promise<void>;
+  /** «✓ Tasdiqlangan» belgisini qo‘yish / olish */
+  setVerified(c: AdminCenter, on: boolean): Promise<void>;
   /** Tez qo‘shish: egasiz markaz (source: "admin", claimed: false) — yangi ID */
   addCenter(input: QuickCenterInput): Promise<string>;
 }
@@ -102,6 +104,15 @@ export interface OwnerApi {
   /** Bot QR posterini (PNG) Telegram’ga yuboradi */
   requestQr(centerId: string): Promise<void>;
 }
+
+export const REPORT_REASONS = {
+  price: "Narx noto‘g‘ri",
+  seats: "Bo‘sh joy haqidagi ma’lumot noto‘g‘ri",
+  contact: "Manzil yoki telefon noto‘g‘ri",
+  closed: "Markaz yopilgan / ishlamaydi",
+  other: "Boshqa"
+} as const;
+export type ReportReason = keyof typeof REPORT_REASONS;
 
 /** Markaz sahifasidagi hodisalar — kunlik agregat hisoblagich (har biri alohida hujjat emas) */
 export type CenterEvent = "views" | "calls" | "routes";
@@ -129,6 +140,8 @@ export interface Backend {
   submitApplication(input: ApplyInput): Promise<Application>;
   watchApplications(cb: (apps: Application[]) => void): Unsub;
   joinWaitlist(centerId: string, groupIndex: number): Promise<void>;
+  /** «Ma’lumot noto‘g‘ri» shikoyati — adminga (Telegram ichida; kuniga bir markazga bitta) */
+  reportCenter(center: Center, reason: ReportReason, comment: string): Promise<void>;
   /** «Bu mening markazim» — admin tasdiqlaydi */
   requestClaim(center: Center): Promise<void>;
   /** Saqlangan qidiruvlar (bot mos bo‘sh joy ochilganda yozadi; kuniga 3 tagacha) */
