@@ -189,5 +189,10 @@ service cloud.firestore {
         allow update, delete: if false;
       }
     }
+
+    // Bot ichki holati (yagona nusxa qulfi, rejalashtiruvchi) — faqat bot (Admin SDK) ishlatadi
+    match /system/{doc} {
+      allow read, write: if false;
+    }
   }
 }

@@ -17,4 +17,6 @@ USER bot
 
 # Maxfiy ma'lumotlar konteynerga KIRMAYDI — muhit o'zgaruvchilari orqali:
 # BOT_TOKEN, WEBAPP_URL, ADMIN_IDS, FIREBASE_CREDENTIALS_JSON
+# /health (Railway healthcheck, UptimeRobot)
+EXPOSE 8080
 CMD ["python", "main.py"]

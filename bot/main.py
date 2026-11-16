@@ -125,6 +125,8 @@ from aiogram.types import (  # noqa: E402
 from firebase_admin import auth as fb_auth, credentials, firestore  # noqa: E402
 from google.cloud.firestore_v1.base_query import FieldFilter  # noqa: E402
 
+import ops  # noqa: E402
+from logic import due_daily, local_date  # noqa: E402
 from parsers import (  # noqa: E402
     TARIFF_PRICES,
     AI_SYSTEM,
@@ -1279,19 +1281,22 @@ async def admin_decide(call: CallbackQuery, bot: Bot):
     await call.answer(mark)
 
 
-# ---------------- Fallbacks (eng oxirida bo'lishi shart) ----------------
-@router.callback_query()
+# ---------------- Fallbacks: alohida router, Dispatcher'ga ENG OXIRIDA ulanadi ----------------
+fallback_router = Router()
+
+
+@fallback_router.callback_query()
 async def stale_callback(call: CallbackQuery):
     await call.answer("Bu tugma eskirgan. /markaz ni qayta oching.")
 
 
-@router.message(StateFilter(None))
+@fallback_router.message(StateFilter(None))
 async def no_state(message: Message):
     # bitta xabar; pastki menyu /start'dan beri doim turadi
     await message.answer("Quyidagilardan birini tanlang yoki pastdagi menyudan foydalaning 👇", reply_markup=welcome_kb())
 
 
-@router.message()
+@fallback_router.message()
 async def wrong_input(message: Message):
     await message.answer("Iltimos, so‘ralgan ma’lumotni yuboring. Bekor qilish: /cancel")
 
@@ -1789,7 +1794,10 @@ async def supervise_watchers(watchers: dict, factories: dict):
             except Exception:  # noqa: BLE001
                 alive = False
             if alive:
+                ops.STATE.dead_watchers.discard(name)
                 continue
+            ops.STATE.watcher_restarts += 1
+            ops.STATE.dead_watchers.add(name)
             log.warning("Kuzatuvchi to'xtagan: %s — qayta ishga tushiryapman", name)
             try:
                 w.unsubscribe()
@@ -1797,9 +1805,67 @@ async def supervise_watchers(watchers: dict, factories: dict):
                 pass
             try:
                 watchers[name] = await asyncio.to_thread(factories[name])
+                ops.STATE.dead_watchers.discard(name)
                 log.info("Kuzatuvchi tiklandi: %s", name)
             except Exception as e:  # noqa: BLE001
                 log.warning("Kuzatuvchini tiklab bo'lmadi (%s): %s — keyingi tekshiruvda yana urinaman", name, e)
+
+
+# ---------------- Adminlarga xabar ----------------
+async def notify_admins(bot: Bot, text: str, **kw):
+    for admin in ADMIN_IDS:
+        try:
+            await bot.send_message(admin, text, **kw)
+        except Exception as e:  # noqa: BLE001
+            log.info("Adminga (%s) yuborilmadi: %s", admin, e)
+
+
+# ---------------- Rejalashtiruvchi (Toshkent vaqti, system/schedule'da oxirgi bajarilish sanasi) ----------------
+SCHEDULE = db.collection("system").document("schedule")
+SCHEDULE_CHECK_EVERY = 60  # soniya
+
+
+async def job_backup(bot: Bot):
+    await ops.send_backup(db, bot, sorted(ADMIN_IDS), "kunlik")
+
+
+# (nom, tekshiruvchi) — tekshiruvchi(now, oxirgi_sana) -> bool
+SCHEDULED_JOBS = [
+    ("backup", lambda now, last: due_daily(now, 3, 0, last), job_backup),
+]
+
+
+async def scheduler_loop(bot: Bot):
+    while True:
+        try:
+            now = datetime.now(timezone.utc)
+            snap = await asyncio.to_thread(SCHEDULE.get)
+            last = (snap.to_dict() or {}) if snap.exists else {}
+            for name, due, job in SCHEDULED_JOBS:
+                if not due(now, last.get(name)):
+                    continue
+                # Avval belgilaymiz — xato bo'lsa ham bir kunda qayta-qayta urinib spam qilmaydi
+                await asyncio.to_thread(SCHEDULE.set, {name: local_date(now)}, merge=True)
+                try:
+                    await job(bot)
+                except Exception:  # noqa: BLE001
+                    log.exception("Rejali ish xatosi: %s", name)
+        except Exception:  # noqa: BLE001
+            log.exception("Rejalashtiruvchi xatosi")
+        await asyncio.sleep(SCHEDULE_CHECK_EVERY)
+
+
+@router.message(Command("backup"))
+async def backup_cmd(message: Message, bot: Bot):
+    if not is_admin(message.from_user.id):
+        return
+    wait = await message.answer("💾 Zaxira nusxa tayyorlanmoqda…")
+    try:
+        await ops.send_backup(db, bot, [message.chat.id], "qo‘lda")
+        await wait.delete()
+    except Exception as e:  # noqa: BLE001
+        log.exception("Qo'lda zaxira nusxa xatosi")
+        await wait.edit_text(f"❌ Zaxira nusxa olinmadi: {escape(str(e))[:300]}")
 
 
 # ---------------- Main ----------------
@@ -1827,9 +1893,14 @@ async def main():
     )
     logging.getLogger("aiogram.event").setLevel(logging.WARNING)
     log_listener = install_firestore_logging()
+    logging.getLogger().addHandler(ops.ErrorCounter())
+    health = await ops.start_health_server()
     bot = Bot(BOT_TOKEN, session=make_session(), default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
     dp.include_router(router)
+    dp.include_router(fallback_router)
+    # Faqat bitta nusxa ishlaydi: boshqasi (masalan kompyuterdagi bot) ishlayotgan bo'lsa — kutamiz
+    await ops.acquire_lock(db)
 
     # Ishga tushishda tarmoq vaqtincha uzilsa — yiqilmasdan qayta urinamiz (5, 10, 20, 40 s)
     for attempt in range(5):
@@ -1855,6 +1926,7 @@ async def main():
         BotCommand(command="admin", description="Admin panel"),
         BotCommand(command="stat", description="Statistika"),
         BotCommand(command="logs", description="Oxirgi xatolar"),
+        BotCommand(command="backup", description="Zaxira nusxa olish"),
     ]
     for admin in ADMIN_IDS:
         try:
@@ -1888,6 +1960,16 @@ async def main():
     await asyncio.to_thread(ensure_admin_claims)
     reminder = asyncio.create_task(reminder_loop(bot))
     cleanup = asyncio.create_task(cleanup_loop())
+    scheduler = asyncio.create_task(scheduler_loop(bot))
+    self_check = asyncio.create_task(ops.self_check_loop(lambda text: notify_admins(bot, text)))
+    lost = {"v": False}
+
+    async def on_lock_lost():
+        lost["v"] = True
+        await dp.stop_polling()
+
+    ops.STATE.last_ok = time.time()
+    heartbeat = asyncio.create_task(ops.heartbeat_loop(db, bot, on_lock_lost))
     log.info("Bot ishga tushdi. Adminlar: %s | AI: %s", ", ".join(map(str, ADMIN_IDS)) or "yo‘q",
              f"Groq ({GROQ_MODEL})" if GROQ_API_KEY else "o‘chiq (GROQ_API_KEY yo‘q)")
     try:
@@ -1899,10 +1981,16 @@ async def main():
                 w.unsubscribe()
             except Exception:  # noqa: BLE001
                 pass
-        reminder.cancel()
-        cleanup.cancel()
+        for t in (reminder, cleanup, scheduler, self_check, heartbeat):
+            t.cancel()
+        if not lost["v"]:
+            await asyncio.to_thread(ops.release_lock, db)
+        if health:
+            await health.cleanup()
         log_listener.stop()
         await bot.session.close()
+    if lost["v"]:
+        sys.exit(1)  # qayta ishga tushganda yana qulfni kutadi
 
 
 if __name__ == "__main__":

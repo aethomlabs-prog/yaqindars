@@ -236,21 +236,83 @@ AI yordamchi hozircha qoidaga asoslangan qidiruv bilan ishlaydi (LLM uchun serve
 
 ## Botni 24/7 ishlatish (Railway yoki Render)
 
-Bot polling rejimida ishlaydi: **bir vaqtda faqat bitta nusxa** ishlashi kerak (kompyuterdagi botni o‘chiring).
+Bot polling rejimida ishlaydi: **bir vaqtda faqat bitta nusxa** ishlashi kerak. Buni bot o‘zi nazorat qiladi:
+ishga tushganda Firestore’dagi `system/botLock` qulfini oladi va har 30 soniyada yangilab turadi. Ikkinchi nusxa
+(masalan kompyuterdagi bot) qulf band ekanini ko‘rib **kutib turadi** («Boshqa nusxa ishlayapti… kutyapman»)
+va polling boshlamaydi. Birinchisi to‘xtasa, 90 soniyadan keyin ikkinchisi o‘zi ishga tushadi.
+Shunday bo‘lsa ham, Railway ishga tushgach **kompyuterdagi botni o‘chiring**.
+
 Maxfiy fayllar konteynerga kirmaydi (`bot/.dockerignore`) — hammasi muhit o‘zgaruvchilari orqali beriladi:
 
 | O‘zgaruvchi | Qiymat |
 |---|---|
 | `BOT_TOKEN` | @BotFather tokeni |
-| `WEBAPP_URL` | Vercel manzili, masalan `https://yaqindars.vercel.app/` |
+| `WEBAPP_URL` | Vercel manzili, masalan `https://yaqindars-i9ml.vercel.app/` |
 | `ADMIN_IDS` | admin Telegram ID(lar)i, vergul bilan |
-| `FIREBASE_CREDENTIALS_JSON` | `serviceAccount.json` faylining **butun matni** (bitta qatorga) |
+| `FIREBASE_CREDENTIALS_JSON` | `serviceAccount.json` faylining **butun matni** (fayl bo‘lsa — `FIREBASE_CREDENTIALS` yo‘li) |
+| `GROQ_API_KEY` | ixtiyoriy: AI yordamchi uchun |
 | `LOG_LEVEL` | ixtiyoriy: `INFO` (standart) yoki `DEBUG` |
+| `PORT` | Railway o‘zi beradi; kompyuterda standart `8080` |
 
-**Railway** (oddiyroq): railway.com → New Project → Deploy from GitHub repo → `yaqindars` →
-Settings → **Root Directory: `bot`** (`bot/railway.json` va `Dockerfile` o‘zi topiladi) → Variables bo‘limiga
-yuqoridagilarni kiriting → Deploy. `restartPolicyType: ALWAYS` — bot yiqilsa avtomatik qayta ishga tushadi.
-Loglar: servis → **Deployments → View Logs**.
+### Railway — qadamma-qadam
+
+1. **railway.com** → o‘ng yuqorida **Login** → **Login with GitHub**.
+2. **New Project** → **Deploy from GitHub repo** → `yaqindars` repo’sini tanlang
+   (ro‘yxatda bo‘lmasa: **Configure GitHub App** → repo’ga ruxsat bering).
+3. Paydo bo‘lgan servis kartochkasini bosing → **Settings** tabi → **Source** bo‘limi →
+   **Add Root Directory** → `bot` yozing. (`bot/railway.json` va `Dockerfile` o‘zi topiladi.)
+4. **Variables** tabi → **Raw Editor** → quyidagilarni qo‘ying va **Update Variables**:
+   ```
+   BOT_TOKEN=...
+   WEBAPP_URL=https://yaqindars-i9ml.vercel.app/
+   ADMIN_IDS=...
+   GROQ_API_KEY=...
+   ```
+   `FIREBASE_CREDENTIALS_JSON` uchun **New Variable** → nomi `FIREBASE_CREDENTIALS_JSON` →
+   qiymatiga `serviceAccount.json` ni Bloknotda ochib, **butun matnini** nusxalab qo‘ying → **Add**.
+5. Yuqorida **Deploy** (yoki **Apply changes**) tugmasi chiqadi — bosing.
+6. **Deployments** tabi → oxirgi deploy → **View Logs**. Kutilgan qatorlar:
+   `Yagona nusxa qulfi olindi` → `Bot ishga tushdi` → `Run polling for bot @yaqindars_bot`.
+   Agar `Boshqa nusxa ishlayapti… kutyapman` chiqsa — kompyuterdagi botni o‘chiring, 90 s dan keyin o‘zi ishlaydi.
+7. Kompyuterdagi botni to‘xtating (terminalda `Ctrl+C` yoki Vazifalar dispetcheri → `python.exe`).
+
+Avtomatik himoya (`bot/railway.json`):
+- `healthcheckPath: /health` — yangi deploy faqat `/health` 200 qaytarsa ishga tushiriladi, aks holda eskisi qoladi.
+- `restartPolicyType: ALWAYS` — bot yiqilsa yoki qulfni yo‘qotsa, Railway uni qayta ishga tushiradi.
+- `numReplicas: 1` — bitta nusxa.
+
+`/health` javoblari: `ok` (200) — Telegram bilan oxirgi aloqa 2 daqiqa ichida; `standby` (200) — boshqa nusxa
+ishlayapti, bu kutyapti; `starting` (200); aks holda **503**.
+
+### Monitoring: UptimeRobot (bepul)
+
+1. Railway → servis → **Settings** → **Networking** → **Generate Domain** → port `8080` → manzil chiqadi,
+   masalan `yaqindars-bot-production.up.railway.app`.
+2. **uptimerobot.com** → **Register** (bepul) → **+ New monitor** (yoki **Add New Monitor**).
+3. Monitor Type: **HTTP(s)** · URL: `https://<manzil>/health` · Monitoring Interval: **5 minutes**.
+4. **Integrations & Team** → **Telegram** ni ulang (yoki email qoldiring) → **Create Monitor**.
+   Bot to‘xtasa yoki `/health` 503 qaytarsa, 5 daqiqada xabar keladi.
+
+Bundan tashqari bot **har 10 daqiqada o‘zini tekshiradi** va muammo bo‘lsa adminlarga (`ADMIN_IDS`) Telegram’da
+yozadi: Firestore kuzatuvchisi to‘xtab qolsa, 10 daqiqada 3+ marta qayta ulansa, 10+ xato bo‘lsa yoki Telegram
+bilan aloqa 2 daqiqadan beri bo‘lmasa. Bir xil ogohlantirish soatiga bir martadan ko‘p kelmaydi.
+
+### Zaxira nusxa (backup)
+
+Har kuni **03:00 (Toshkent)** bot `centers`, `applications`, `users` (+ `children`, `favorites`), `chats`
+(+ `messages`) va `ratings` ni JSON qilib zip’laydi va adminlarga Telegram fayli sifatida yuboradi.
+45 MB dan katta bo‘lsa `….zip.part1`, `….zip.part2` qismlarga bo‘linadi. Bot 03:00 da o‘chiq bo‘lsa —
+yoqilganda o‘sha kuni yuboradi. Qo‘lda: botga **`/backup`** (faqat admin).
+
+Tiklash (`bot/` papkasida, kompyuterda):
+```bash
+python scripts/restore.py yaqindars_2026-11-16_0300.zip              # DRY-RUN: nima tiklanishini ko‘rsatadi
+python scripts/restore.py nusxa.zip --only centers                   # faqat bitta kolleksiya
+python scripts/restore.py nusxa.zip.part1 nusxa.zip.part2 --apply    # haqiqatdan yozish («HA» deb tasdiqlanadi)
+```
+`--apply` zaxiradagi hujjatlarni o‘sha holatga qaytaradi; zaxirada yo‘q yangi hujjatlarga tegmaydi.
+
+### Render / VPS
 
 **Render**: render.com → New → **Blueprint** → repo’ni tanlang (`render.yaml` o‘qiladi) → o‘zgaruvchilarni
 kiriting → Apply. Background Worker pullik (Starter). Loglar: servis → **Logs**.
@@ -259,8 +321,7 @@ kiriting → Apply. Background Worker pullik (Starter). Loglar: servis → **Log
 ```bash
 cd bot
 docker build -t yaqindars-bot .
-docker run -d --name yaqindars-bot --restart unless-stopped --env-file .env \
-  -e FIREBASE_CREDENTIALS_JSON="$(cat serviceAccount.json)" yaqindars-bot
+docker run -d --name yaqindars-bot --restart unless-stopped --env-file .env -p 8080:8080   -e FIREBASE_CREDENTIALS_JSON="$(cat serviceAccount.json)" yaqindars-bot
 docker logs -f yaqindars-bot
 ```
 
@@ -315,3 +376,5 @@ Har relizdan oldin **ikkala** telefonda o‘ting. Muammo bo‘lsa, ilovani `?deb
 | 13 | Profil → «Ma’lumotlarimni o‘chirish» (yoki `/delete`) | Tasdiqlash oynasi → hammasi o‘chadi, botdan xabar keladi | ☐ | ☐ |
 | 14 | Profil → «Maxfiylik siyosati» | `/privacy` sahifasi ochiladi | ☐ | ☐ |
 | 15 | Qorong‘i mavzu (Telegram sozlamasi) | Matnlar o‘qiladi, banner ranglari o‘zgarmaydi | ☐ | ☐ |
+| 16 | Admin: botga `/backup` | 2–10 s ichida `yaqindars_….zip` fayli va kolleksiyalar soni | ☐ | ☐ |
+| 17 | `https://<railway-manzil>/health` (brauzerda) | `ok` | ☐ | ☐ |
