@@ -252,3 +252,129 @@ def campaign_slug(text: str) -> str | None:
 
     s = (text or "").strip().lower()
     return s if re.fullmatch(r"[a-z0-9_]{2,30}", s) else None
+
+
+# ---------------- Saqlangan qidiruv («Shunday joy ochilsa xabar ber») ----------------
+WATCH_DAILY_LIMIT = 3  # bitta foydalanuvchiga kuniga ko'pi bilan
+WATCH_SENT_KEEP = 60  # bitta kuzatuvda eslab qolinadigan yuborilgan guruhlar soni
+
+
+def _km(a_lat, a_lng, b_lat, b_lng) -> float:
+    import math  # noqa: PLC0415
+
+    r = 6371.0
+    p1, p2 = math.radians(a_lat), math.radians(b_lat)
+    dp, dl = p2 - p1, math.radians(b_lng - a_lng)
+    h = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(h))
+
+
+def watch_matches(w: dict, center: dict, group: dict) -> bool:
+    """Kuzatuv shartlari: fan, radius (kuzatuv saqlangan joydan), eng yuqori narx, kunlar. Bo'sh joy > 0."""
+    if (group.get("freeSeats") or 0) <= 0:
+        return False
+    subj = w.get("subject")
+    if subj and str(group.get("subject", "")).lower() != str(subj).lower():
+        return False
+    max_price = w.get("maxPrice")
+    price = group.get("price") or 0
+    if max_price and (price <= 0 or price > max_price):
+        return False
+    days = w.get("days") or []
+    if days and (not group.get("days") or not set(group["days"]) <= set(days)):
+        return False
+    radius = w.get("radiusKm")
+    if radius:
+        try:
+            if _km(float(w["lat"]), float(w["lng"]), float(center["lat"]), float(center["lng"])) > float(radius):
+                return False
+        except (KeyError, TypeError, ValueError):
+            return False
+    return True
+
+
+def watch_key(cid: str, gi: int) -> str:
+    return f"{cid}:{gi}"
+
+
+def watch_should_send(w: dict, key: str, sent_today: int) -> bool:
+    """Takrorlanmasin (shu guruh uchun allaqachon yuborilgan bo'lsa — yo'q) va kuniga 3 tadan oshmasin."""
+    return key not in (w.get("sent") or []) and sent_today < WATCH_DAILY_LIMIT
+
+
+def watch_title(w: dict) -> str:
+    parts = [w.get("subject") or "Istalgan fan"]
+    if w.get("radiusKm"):
+        parts.append(f"{w['radiusKm']:g} km gacha")
+    if w.get("maxPrice"):
+        parts.append(f"{int(w['maxPrice']) // 1000} ming so‘mgacha")
+    if w.get("days"):
+        parts.append(", ".join(w["days"]))
+    return " · ".join(parts)
+
+
+# ---------------- Sinov darsidan keyin baho ----------------
+RATE_AFTER = timedelta(hours=3)
+RATE_WINDOW = timedelta(days=3)  # juda eski darslar uchun so'ramaymiz
+RATING_MIN_COUNT = 3
+
+
+def rating_due(app: dict, now: datetime) -> bool:
+    t = app.get("trialAt")
+    if app.get("status") != "accepted" or app.get("ratingAsked") or app.get("rated") or not isinstance(t, datetime):
+        return False
+    return t + RATE_AFTER <= now <= t + RATE_AFTER + RATE_WINDOW
+
+
+def rating_error(app: dict | None, user_id: int, existing: bool) -> str | None:
+    """Faqat qabul qilingan ariza egasi va faqat bir marta baholay oladi."""
+    if not app:
+        return "Ariza topilmadi."
+    if app.get("tgUserId") != user_id:
+        return "Faqat ariza egasi baholay oladi."
+    if app.get("status") != "accepted":
+        return "Faqat qabul qilingan sinov darsini baholash mumkin."
+    if existing or app.get("rated"):
+        return "Siz bu darsni allaqachon baholagansiz. Rahmat!"
+    return None
+
+
+def display_rating(rating_sum, rating_count) -> float | None:
+    """Kamida 3 ta baho bo'lsa — o'rtacha (1 xona), aks holda None («Yangi»)."""
+    try:
+        n = int(rating_count or 0)
+        if n < RATING_MIN_COUNT:
+            return None
+        return round(float(rating_sum) / n, 1)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
+# ---------------- Inline rejim: @yaqindars_bot ingliz ----------------
+def norm_text(s: str) -> str:
+    s = (s or "").lower()
+    for ch in "‘’ʻʼ`´'":
+        s = s.replace(ch, "")
+    return " ".join(s.split())
+
+
+def inline_search(centers: list[dict], query: str, limit: int = 20) -> list[dict]:
+    """centers: [{"id", "name", "groups", "vip", ...}] (tasdiqlangan, yashirilmagan).
+    «c_<id>» — aniq markaz; bo'sh so'rov — bo'sh joyi borlar; aks holda nom yoki fan bo'yicha."""
+    q = (query or "").strip()
+    if q.startswith("c_"):
+        return [c for c in centers if c.get("id") == q[2:]][:1]
+    nq = norm_text(q)
+
+    def free(c):
+        return sum(int(g.get("freeSeats") or 0) for g in c.get("groups") or [])
+
+    def hit(c):
+        if not nq:
+            return free(c) > 0
+        hay = norm_text(c.get("name", "")) + " " + " ".join(norm_text(g.get("subject", "")) for g in c.get("groups") or [])
+        return all(word in hay for word in nq.split())
+
+    found = [c for c in centers if hit(c)]
+    found.sort(key=lambda c: (not c.get("vip"), free(c) == 0, norm_text(c.get("name", ""))))
+    return found[:limit]

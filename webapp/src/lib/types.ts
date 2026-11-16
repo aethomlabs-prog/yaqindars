@@ -101,6 +101,18 @@ export interface Review {
   createdMs: number;
 }
 
+/** Saqlangan qidiruv: «Shunday joy ochilsa xabar ber» */
+export interface Watch {
+  id: string;
+  subject: string | null;
+  radiusKm: number | null;
+  maxPrice: number | null;
+  days: Day[];
+  lat: number;
+  lng: number;
+  createdMs: number;
+}
+
 export interface LatLng {
   lat: number;
   lng: number;

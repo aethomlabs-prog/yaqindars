@@ -8,6 +8,7 @@ import { LocateFixed, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Circle, MapContainer, Marker, useMap } from "react-leaflet";
 import { CenterRow } from "../../components/cards";
+import { WatchButton } from "../../components/WatchButton";
 import { PIN_PATH } from "../../components/brand";
 import { Chip } from "../../components/ios/controls";
 import { DetentSheet } from "../../components/ios/Sheet";
@@ -267,6 +268,7 @@ export default function MapScreen() {
                 />
               </div>
             ))}
+            {status === "ready" && <WatchButton className="mt-1" />}
             {status === "ready" && !list.length && (
               <EmptyState kind="search" text="Bu shartlarga mos markaz topilmadi." action={{ label: "Filtrlarni tozalash", onClick: () => {
                   f.reset();

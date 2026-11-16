@@ -35,7 +35,8 @@ import { centerChatId } from "./backend";
 import { billingOf, extendUntil } from "./billing";
 import { ruleBasedReply } from "./match";
 import { initData, tgUser } from "./telegram";
-import type { Application, AppStatus, Center, Chat, Child, Day, Message } from "./types";
+import { WATCH_LIMIT } from "./watch";
+import type { Application, AppStatus, Center, Chat, Child, Day, Message, Watch } from "./types";
 
 const ms = (t: unknown): number => {
   const ts = t as Timestamp | null | undefined;
@@ -54,8 +55,9 @@ function toCenter(id: string, d: DocumentData): Center {
     phone: str(d.phone, 20),
     amenities: Array.isArray(d.amenities) ? d.amenities.map((a: unknown) => str(a, 40)).filter(Boolean) : [],
     vip: d.vip === true,
-    rating: num(d.rating),
-    reviewsCount: num(d.reviewsCount) ?? 0,
+    // Ota-onalar bahosi: kamida 3 ta bo‘lsa o‘rtacha, aks holda null («Yangi»)
+    rating: (num(d.ratingCount) ?? 0) >= 3 ? Math.round(((num(d.ratingSum) ?? 0) / (num(d.ratingCount) as number)) * 10) / 10 : null,
+    reviewsCount: num(d.ratingCount) ?? 0,
     description: str(d.description, 1000),
     ageFrom: num(d.ageFrom),
     ageTo: num(d.ageTo),
@@ -363,6 +365,7 @@ export async function createFirebaseBackend(): Promise<Backend> {
     offline: link.offline,
     botUsername: typeof meta?.botUsername === "string" ? meta.botUsername : undefined,
     centerChatEnabled: authed,
+    inlineEnabled: meta?.inlineEnabled === true,
     aiEnabled: authed && aiOn,
 
     async loadCenters() {
@@ -406,6 +409,54 @@ export async function createFirebaseBackend(): Promise<Backend> {
     async joinWaitlist(centerId, groupIndex) {
       need();
       await addDoc(collection(db, "waitlist"), { centerId, groupIndex, userTgId: tgId, createdAt: serverTimestamp(), notified: false });
+    },
+    watchWatches(cb) {
+      if (!tgId) {
+        cb([]);
+        return () => {};
+      }
+      return onSnapshot(
+        query(collection(db, "watches"), where("userTgId", "==", tgId)),
+        (s) =>
+          cb(
+            s.docs
+              .map((d): Watch => {
+                const x = d.data({ serverTimestamps: "estimate" });
+                return {
+                  id: d.id,
+                  subject: typeof x.subject === "string" ? x.subject : null,
+                  radiusKm: num(x.radiusKm),
+                  maxPrice: num(x.maxPrice),
+                  days: (Array.isArray(x.days) ? x.days : []) as Day[],
+                  lat: Number(x.lat),
+                  lng: Number(x.lng),
+                  createdMs: ms(x.createdAt)
+                };
+              })
+              .sort((a, b) => b.createdMs - a.createdMs)
+          ),
+        (e) => console.warn("watches:", e)
+      );
+    },
+    async addWatch(w) {
+      need();
+      const mine = await getDocs(query(collection(db, "watches"), where("userTgId", "==", tgId)));
+      if (mine.size >= WATCH_LIMIT) throw new Error("limit");
+      await addDoc(collection(db, "watches"), {
+        userTgId: tgId,
+        subject: w.subject,
+        radiusKm: w.radiusKm,
+        maxPrice: w.maxPrice,
+        days: w.days,
+        lat: w.lat,
+        lng: w.lng,
+        active: true,
+        createdAt: serverTimestamp()
+      });
+    },
+    async deleteWatch(id) {
+      need();
+      await deleteDoc(doc(db, "watches", id));
     },
     async requestClaim(center) {
       const u = need();

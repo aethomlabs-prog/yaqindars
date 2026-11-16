@@ -352,6 +352,22 @@ Har push’da Railway/Render botni o‘zi qayta joylaydi. Xatolar loglarda va Fi
 
 ---
 
+## Ota-onalar uchun: kuzatuv, baho, o‘rtacha narx, ulashish
+
+- **«🔔 Shunday joy ochilsa xabar ber»** — xaritada fan, radius, narx, kunlarni tanlab, ro‘yxat oxiridagi tugma.
+  `watches` ga saqlanadi (10 tagacha). Guruhda bo‘sh joy 0 dan ko‘paysa, bot mos kuzatuvlar egalariga yozadi:
+  **kuniga 3 tadan ko‘p emas**, bir guruh haqida **bir marta** (`watchDaily`, `sent`). Ro‘yxat va o‘chirish: Profil → Kuzatuvlarim.
+- **Baho** — sinov darsidan 3 soat keyin bot «Dars yoqdimi?» deb 1–5 ⭐ tugmalari bilan so‘raydi, keyin ixtiyoriy izoh.
+  Faqat qabul qilingan ariza egasi, faqat bir marta (`ratings/<arizaId>`). Markazda `ratingSum`/`ratingCount`;
+  reyting **kamida 3 ta baho** bo‘lsa ko‘rinadi, aks holda «Yangi».
+- **O‘rtacha narx** — har guruhda «Rishtonda ingliz tili o‘rtacha ≈ 280 000 so‘m» (kamida 3 guruh) va
+  «O‘rtachadan arzon / qimmat» belgisi (±10%).
+- **Ulashish** — inline rejim yoqilgan bo‘lsa `switchInlineQuery` (chat tanlanadi, rasmli kartochka + «📱 Ochish»),
+  aks holda Telegram ulashish havolasi. Istalgan chatda `@yaqindars_bot ingliz` — markazlar ro‘yxati.
+  **Yoqish:** @BotFather → `/setinline` → @yaqindars_bot → placeholder: `fan yoki markaz nomi`.
+
+---
+
 ## Firestore indekslari (`firestore.indexes.json`)
 
 Ilova va botdagi **barcha** so‘rovlar bitta maydonli (tenglik, bitta diapazon yoki bitta `orderBy`) — ular uchun
@@ -406,3 +422,7 @@ Har relizdan oldin **ikkala** telefonda o‘ting. Muammo bo‘lsa, ilovani `?deb
 | 20 | Admin `/claimcode <ID>` → boshqa akkauntdan `/claim KOD` | «endi sizniki», kabinetda markaz va «Bepul sinov oyi» | ☐ | ☐ |
 | 21 | Kabinet → «Mening QR’im» → «QR posterni olish» | Botda PNG poster; telefon kamerasi bilan skanerlansa markaz sahifasi ochiladi | ☐ | ☐ |
 | 22 | Admin `/link flyer` → havolani boshqa telefonda oching → ariza yuboring | Ilova ochiladi; arizada manba `src_flyer` (admin panel → Manbalar) | ☐ | ☐ |
+| 23 | Xarita → «Ingliz tili» → ro‘yxat oxirida «Shunday joy ochilsa xabar ber» | «Kuzatilmoqda»; Profil → Kuzatuvlarim’da bor, o‘chiriladi | ☐ | ☐ |
+| 24 | Kabinetda shu fandagi guruhga ➕ joy (0 → 1) | Kuzatuvchi ota-onaga «Siz kutgan joy ochildi!» (kuniga ≤ 3) | ☐ | ☐ |
+| 25 | Qabul qilingan arizaning sinov vaqtidan 3 soat o‘tgach | Bot «Dars yoqdimi?» 1–5 ⭐; ikkinchi bosish — «allaqachon baholagansiz» | ☐ | ☐ |
+| 26 | Istalgan chatda `@yaqindars_bot ingliz` | Markazlar kartochkalari, «📱 Ochish» ilovani markaz sahifasida ochadi | ☐ | ☐ |

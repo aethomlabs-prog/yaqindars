@@ -1,5 +1,5 @@
 /* Profil tabi: iOS «Settings» uslubidagi guruhlangan ro‘yxat. */
-import { Baby, Bell, BellRing, ClipboardList, Heart, Info, MapPin, Moon, RotateCcw, Shield, Store, Trash2 } from "lucide-react";
+import { Baby, Bell, BellPlus, BellRing, ClipboardList, Heart, Info, MapPin, Moon, RotateCcw, Shield, Store, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Sheet } from "../../components/ios/Sheet";
 import { Avatar, Button, CountBadge, Segmented, Switch } from "../../components/ios/controls";
@@ -67,6 +67,7 @@ export function ProfileScreen() {
         <Row icon={<ClipboardList size={17} />} iconBg="#34C759" title="Arizalarim" right={<CountBadge n={activeApps} />} chevron onClick={() => push({ name: "applications" })} />
         <Row icon={<Heart size={17} />} iconBg="#FF3B30" title="Saqlanganlar" value={favorites.length || undefined} chevron onClick={() => push({ name: "favorites" })} />
         <Row icon={<MapPin size={17} />} iconBg="#1E6FD9" title="Manzillarim" value={addresses.length || undefined} chevron onClick={() => push({ name: "addresses" })} />
+        <Row icon={<BellPlus size={17} />} iconBg="#FF9500" title="Kuzatuvlarim" subtitle="«Shunday joy ochilsa xabar ber»" chevron onClick={() => push({ name: "watches" })} />
       </Section>
 
       <Section header="Bildirishnomalar" footer="Xabarlar Telegram bot orqali keladi.">

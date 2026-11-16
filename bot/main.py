@@ -112,6 +112,9 @@ from aiogram.fsm.state import State, StatesGroup  # noqa: E402
 from aiogram.types import (  # noqa: E402
     BotCommand,
     BufferedInputFile,
+    InlineQuery,
+    InlineQueryResultArticle,
+    InputTextMessageContent,
     BotCommandScopeChat,
     ErrorEvent,
     CallbackQuery,
@@ -130,7 +133,16 @@ import ops  # noqa: E402
 from google.api_core.exceptions import AlreadyExists  # noqa: E402
 from logic import (  # noqa: E402
     CAMPAIGNS,
+    WATCH_SENT_KEEP,
     billing_action,
+    display_rating,
+    inline_search,
+    rating_due,
+    rating_error,
+    watch_key,
+    watch_matches,
+    watch_should_send,
+    watch_title,
     campaign_slug,
     claim_code_error,
     due_daily,
@@ -1148,6 +1160,9 @@ def delete_user_data(tg_id: int) -> dict:
         c.reference.delete()
     out["chatlar"] = len(chats)
     out["navbatlar"] = _delete_query(WAITLIST.where(filter=FieldFilter("userTgId", "==", tg_id)))
+    out["kuzatuvlar"] = _delete_query(WATCHES.where(filter=FieldFilter("userTgId", "==", tg_id)))
+    # Baholar: shaxsiy yozuv (izoh) o'chadi; markazning umumiy o'rtachasi anonim qoladi
+    out["baholar"] = _delete_query(RATINGS.where(filter=FieldFilter("userTgId", "==", tg_id)))
     # Telegram bog'lanishi: claim'ni olib tashlaymiz (anonim akkaunt boshqa hech narsani ko'ra olmaydi)
     for link in LINKS.where(filter=FieldFilter("tg", "==", tg_id)).stream():
         try:
@@ -1582,6 +1597,9 @@ def start_seats_watcher(bot: Bot, loop: asyncio.AbstractEventLoop):
             for i, n in enumerate(now):
                 if n > 0 and i < len(prev) and prev[i] <= 0:
                     asyncio.run_coroutine_threadsafe(notify_waitlist(bot, ch.document.id, i, c), loop)
+                # Saqlangan qidiruvlar: joy 0 dan ko'paydi yoki joyli yangi guruh qo'shildi
+                if n > 0 and (i >= len(prev) or prev[i] <= 0):
+                    asyncio.run_coroutine_threadsafe(notify_watches(bot, ch.document.id, i, c), loop)
 
     return CENTERS.where(filter=FieldFilter("approved", "==", True)).on_snapshot(on_snapshot)
 
@@ -2351,6 +2369,225 @@ async def job_billing(bot: Bot):
             log.info("To'lov eslatmasi (%s, %s): %s", snap.id, kind, e)
 
 
+# ======================= Ota-onalar: kuzatuvlar, baholar, inline rejim =======================
+WATCHES = db.collection("watches")  # «Shunday joy ochilsa xabar ber»
+WATCH_DAILY = db.collection("watchDaily")  # {tg}_{sana}: count — kuniga 3 tadan oshmasin
+RATINGS = db.collection("ratings")  # ID = ariza ID (bitta arizaga bitta baho)
+
+
+@firestore.transactional
+def _watch_claim_txn(transaction, w_ref, daily_ref, key: str) -> bool:
+    w_snap = w_ref.get(transaction=transaction)
+    d_snap = daily_ref.get(transaction=transaction)
+    if not w_snap.exists:
+        return False
+    w = w_snap.to_dict() or {}
+    count = int((d_snap.to_dict() or {}).get("count", 0)) if d_snap.exists else 0
+    if not watch_should_send(w, key, count):
+        return False
+    sent = (list(w.get("sent") or []) + [key])[-WATCH_SENT_KEEP:]
+    transaction.update(w_ref, {"sent": sent, "lastSentAt": firestore.SERVER_TIMESTAMP})
+    transaction.set(daily_ref, {"count": count + 1, "updatedAt": firestore.SERVER_TIMESTAMP}, merge=True)
+    return True
+
+
+async def notify_watches(bot: Bot, cid: str, gi: int, center: dict):
+    """Guruhda bo'sh joy paydo bo'ldi — mos saqlangan qidiruvlar egalariga xabar."""
+    if center.get("hidden"):
+        return
+    try:
+        g = (center.get("groups") or [])[gi]
+        docs = await asyncio.to_thread(lambda: list(WATCHES.where(filter=FieldFilter("active", "==", True)).stream()))
+        date = local_date(datetime.now(timezone.utc))
+        for d in docs:
+            w = as_dict(d)
+            uid = w.get("userTgId")
+            if not isinstance(uid, int) or not watch_matches(w, center, g):
+                continue
+            daily = WATCH_DAILY.document(f"{uid}_{date}")
+            ok = await asyncio.to_thread(lambda: _watch_claim_txn(db.transaction(), d.reference, daily, watch_key(cid, gi)))
+            if not ok:
+                continue
+            price = f" · {fmt_sum(g['price'])}" if (g.get("price") or 0) > 0 else ""
+            kb = InlineKeyboardMarkup(inline_keyboard=[[ibtn("📱 Markazni ochish", center_link(cid), "primary")]])
+            try:
+                await bot.send_message(
+                    uid,
+                    f"🔔 <b>Siz kutgan joy ochildi!</b>\n\n🏫 {escape(clean_name(center.get('name')))}\n"
+                    f"📚 {escape(str(g.get('subject', '')))}{price}\n🪑 Bo‘sh joy: <b>{int(g.get('freeSeats') or 0)}</b>\n\n"
+                    f"<i>Kuzatuv: {escape(watch_title(w))}</i>\nO‘chirish: ilova → Profil → Kuzatuvlarim",
+                    reply_markup=kb,
+                )
+            except Exception as e:  # noqa: BLE001
+                log.info("Kuzatuv xabari yuborilmadi (%s): %s", uid, e)
+    except Exception:  # noqa: BLE001
+        log.exception("Kuzatuvlar (%s) xabarlarida xato", cid)
+
+
+# ---------------- Sinov darsidan 3 soat keyin: «Dars yoqdimi?» ----------------
+RATING_CHECK_EVERY = 10 * 60  # soniya
+
+
+def rating_kb(app_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=f"{n} ⭐", callback_data=f"rt:{app_id}:{n}") for n in range(1, 6)
+    ]])
+
+
+async def ask_ratings(bot: Bot):
+    now = datetime.now(timezone.utc)
+    q = APPS.where(filter=FieldFilter("status", "==", "accepted"))
+    for d in await asyncio.to_thread(lambda: list(q.stream())):
+        a = as_dict(d)
+        if not rating_due(a, now) or not isinstance(a.get("tgUserId"), int):
+            continue
+        if not await claim_if(d.reference, lambda x: not x.get("ratingAsked"), {"ratingAsked": True}):
+            continue
+        try:
+            await bot.send_message(
+                a["tgUserId"],
+                f"🎓 <b>{escape(clean_name(a.get('centerName')))}</b> — sinov darsi qanday o‘tdi?\n\n"
+                "<b>Dars yoqdimi?</b> Baholang: 1 — yoqmadi, 5 — juda yoqdi.\nBahoyingiz boshqa ota-onalarga yordam beradi.",
+                reply_markup=rating_kb(d.id),
+            )
+        except Exception as e:  # noqa: BLE001
+            log.info("Baho so'rovi yuborilmadi (%s): %s", d.id, e)
+
+
+async def rating_loop(bot: Bot):
+    while True:
+        try:
+            await ask_ratings(bot)
+        except Exception:  # noqa: BLE001
+            log.exception("Baho so'rovlarida xato")
+        await asyncio.sleep(RATING_CHECK_EVERY)
+
+
+@firestore.transactional
+def _rate_txn(transaction, app_ref, user_id: int, stars: int):
+    app_snap = app_ref.get(transaction=transaction)
+    app = app_snap.to_dict() if app_snap.exists else None
+    r_ref = RATINGS.document(app_ref.id)
+    r_snap = r_ref.get(transaction=transaction)
+    err = rating_error(app, user_id, r_snap.exists)
+    if err:
+        return err, None
+    c_ref = CENTERS.document(str(app.get("centerId")))
+    if not c_ref.get(transaction=transaction).exists:
+        return "Markaz topilmadi.", None
+    transaction.set(r_ref, {"centerId": app.get("centerId"), "centerName": app.get("centerName", ""), "userTgId": user_id,
+                            "stars": stars, "comment": "", "createdAt": firestore.SERVER_TIMESTAMP})
+    transaction.update(c_ref, {"ratingSum": firestore.Increment(stars), "ratingCount": firestore.Increment(1)})
+    transaction.update(app_ref, {"rated": True})
+    return None, app
+
+
+class RateComment(StatesGroup):
+    text = State()
+
+
+@router.callback_query(F.data.startswith("rt:"))
+async def on_rate(call: CallbackQuery):
+    try:
+        _, app_id, n = call.data.split(":")
+        stars = int(n)
+        assert 1 <= stars <= 5 and "/" not in app_id
+    except (ValueError, AssertionError):
+        return await call.answer()
+    err, app = await asyncio.to_thread(lambda: _rate_txn(db.transaction(), APPS.document(app_id), call.from_user.id, stars))
+    if err:
+        await call.answer(err, show_alert=True)
+        try:
+            await call.message.edit_reply_markup(reply_markup=None)
+        except TelegramBadRequest:
+            pass
+        return
+    await call.answer("Rahmat!")
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✍️ Izoh yozish (ixtiyoriy)", callback_data=f"rc:{app_id}")]])
+    try:
+        await call.message.edit_text(
+            f"🎓 <b>{escape(clean_name(app.get('centerName')))}</b>\nBahoyingiz: {'⭐' * stars}\n\nRahmat! Xohlasangiz, qisqa izoh qoldiring.",
+            reply_markup=kb,
+        )
+    except TelegramBadRequest:
+        pass
+
+
+@router.callback_query(F.data.startswith("rc:"))
+async def rate_comment_start(call: CallbackQuery, state: FSMContext):
+    app_id = call.data.split(":", 1)[1]
+    snap = await asyncio.to_thread(RATINGS.document(app_id).get) if "/" not in app_id else None
+    if not snap or not snap.exists or as_dict(snap).get("userTgId") != call.from_user.id:
+        return await call.answer("Baho topilmadi.", show_alert=True)
+    await state.set_state(RateComment.text)
+    await state.update_data(rate_app=app_id)
+    await call.message.answer("✍️ Izohingizni yozing (300 belgigacha). Bekor qilish: /cancel")
+    await call.answer()
+
+
+@router.message(RateComment.text, TEXT)
+async def rate_comment_save(message: Message, state: FSMContext):
+    d = await state.get_data()
+    await state.clear()
+    ref = RATINGS.document(str(d.get("rate_app", "")))
+    snap = await asyncio.to_thread(ref.get)
+    if not snap.exists or as_dict(snap).get("userTgId") != message.from_user.id:
+        return await message.answer("Baho topilmadi.", reply_markup=main_menu())
+    await asyncio.to_thread(ref.update, {"comment": " ".join(message.text.split())[:300]})
+    await message.answer("✅ Izohingiz saqlandi. Rahmat!", reply_markup=main_menu())
+
+
+# ---------------- Inline rejim: @yaqindars_bot ingliz ----------------
+_inline_cache: dict = {"at": 0.0, "items": []}
+INLINE_TTL = 300  # soniya
+
+
+async def inline_centers() -> list[dict]:
+    if time.time() - _inline_cache["at"] < INLINE_TTL:
+        return _inline_cache["items"]
+    snaps = await asyncio.to_thread(lambda: list(CENTERS.where(filter=FieldFilter("approved", "==", True)).stream()))
+    items = []
+    for s in snaps:
+        c = as_dict(s)
+        if c.get("hidden"):
+            continue
+        items.append({"id": s.id, "name": clean_name(c.get("name")), "groups": c.get("groups") or [], "vip": bool(c.get("vip")),
+                      "photoUrl": c.get("photoUrl"), "address": c.get("address", ""),
+                      "rating": display_rating(c.get("ratingSum"), c.get("ratingCount"))})
+    _inline_cache.update(at=time.time(), items=items)
+    return items
+
+
+def inline_result(c: dict) -> InlineQueryResultArticle:
+    groups = c["groups"]
+    free = sum(int(g.get("freeSeats") or 0) for g in groups)
+    prices = [g.get("price") or 0 for g in groups if (g.get("price") or 0) > 0]
+    subjects = ", ".join(dict.fromkeys(str(g.get("subject", "")) for g in groups if g.get("subject")))
+    price = f"{fmt_sum(min(prices))} dan" if prices else "narxini so‘rang"
+    seats = f"🪑 {free} bo‘sh joy" if free else "joy hozircha yo‘q"
+    rating = f" · ⭐ {c['rating']}" if c.get("rating") else ""
+    thumb = c["photoUrl"] if str(c.get("photoUrl") or "").startswith("https://") else urljoin(WEBAPP_URL.split("?")[0], "icon-192.png")
+    text = (f"🏫 <b>{escape(c['name'])}</b>{' 👑' if c.get('vip') else ''}\n📚 {escape(subjects or '—')}\n"
+            f"{seats} · 💰 {price}{rating}\n📍 {escape(str(c.get('address') or ''))}\n\nYaqinDars — bepul sinov darsiga yoziling 👇")
+    return InlineQueryResultArticle(
+        id=c["id"][:64],
+        title=c["name"] + (" 👑" if c.get("vip") else ""),
+        description=f"{subjects or '—'}\n{seats} · {price}",
+        thumbnail_url=thumb,
+        input_message_content=InputTextMessageContent(message_text=text, parse_mode=ParseMode.HTML),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📱 Ochish", url=center_link(c["id"]))]]),
+    )
+
+
+@router.inline_query()
+async def on_inline(query: InlineQuery):
+    try:
+        found = inline_search(await inline_centers(), query.query, 20)
+        await query.answer([inline_result(c) for c in found], cache_time=60, is_personal=False)
+    except Exception:  # noqa: BLE001
+        log.exception("Inline so'rov xatosi")
+
+
 # ---------------- Adminlarga xabar ----------------
 async def notify_admins(bot: Bot, text: str, **kw):
     for admin in ADMIN_IDS:
@@ -2485,7 +2722,8 @@ async def main():
     # Web app «Ulashish» va «Markaz qo‘shish» havolalari uchun bot username'i (ochiq ma'lumot)
     # Ochiq sozlamalar: bot username (ulashish havolalari) va AI yoqilganmi
     await asyncio.to_thread(
-        db.collection("meta").document("public").set, {"botUsername": me.username, "aiEnabled": bool(GROQ_API_KEY)}, merge=True
+        db.collection("meta").document("public").set,
+        {"botUsername": me.username, "aiEnabled": bool(GROQ_API_KEY), "inlineEnabled": bool(me.supports_inline_queries)}, merge=True
     )
 
     loop = asyncio.get_running_loop()
@@ -2510,6 +2748,7 @@ async def main():
     reminder = asyncio.create_task(reminder_loop(bot))
     cleanup = asyncio.create_task(cleanup_loop())
     scheduler = asyncio.create_task(scheduler_loop(bot))
+    ratings = asyncio.create_task(rating_loop(bot))
     self_check = asyncio.create_task(ops.self_check_loop(lambda text: notify_admins(bot, text)))
     lost = {"v": False}
 
@@ -2530,7 +2769,7 @@ async def main():
                 w.unsubscribe()
             except Exception:  # noqa: BLE001
                 pass
-        for t in (reminder, cleanup, scheduler, self_check, heartbeat):
+        for t in (reminder, cleanup, scheduler, self_check, heartbeat, ratings):
             t.cancel()
         if not lost["v"]:
             await asyncio.to_thread(ops.release_lock, db)

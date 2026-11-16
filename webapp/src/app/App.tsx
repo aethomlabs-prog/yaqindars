@@ -22,6 +22,7 @@ import { ApplicationsPage } from "../screens/profile/ApplicationsPage";
 import { FavoritesPage } from "../screens/profile/FavoritesPage";
 import { AddressesPage } from "../screens/profile/AddressesPage";
 import { AboutPage } from "../screens/profile/AboutPage";
+import { WatchesPage } from "../screens/profile/WatchesPage";
 
 // Xarita (Leaflet) — alohida chunk, faqat Xarita tabida yuklanadi
 const MapScreen = lazy(() => import("../screens/map/MapScreen"));
@@ -54,6 +55,8 @@ function renderRoute(r: Route): ReactNode {
       return <AddressesPage />;
     case "about":
       return <AboutPage />;
+    case "watches":
+      return <WatchesPage />;
   }
 }
 

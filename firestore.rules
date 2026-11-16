@@ -263,6 +263,34 @@ service cloud.firestore {
       }
     }
 
+    // Saqlangan qidiruv («Shunday joy ochilsa xabar ber»): faqat egasi ko'radi va o'chiradi.
+    // "sent" (yuborilganlar) maydonini faqat bot yozadi.
+    match /watches/{id} {
+      allow read: if isTg(resource.data.userTgId) || isAdmin();
+      allow delete: if isTg(resource.data.userTgId);
+      allow create: if isTg(request.resource.data.userTgId)
+        && request.resource.data.keys().hasOnly(['userTgId', 'subject', 'radiusKm', 'maxPrice', 'days', 'lat', 'lng', 'active', 'createdAt'])
+        && (request.resource.data.subject == null || (request.resource.data.subject is string && request.resource.data.subject.size() <= 40))
+        && (request.resource.data.radiusKm == null || (request.resource.data.radiusKm is number && request.resource.data.radiusKm > 0 && request.resource.data.radiusKm <= 50))
+        && (request.resource.data.maxPrice == null || (request.resource.data.maxPrice is number && request.resource.data.maxPrice >= 10000 && request.resource.data.maxPrice <= 10000000))
+        && request.resource.data.days is list && request.resource.data.days.size() <= 7
+        && request.resource.data.lat is number && request.resource.data.lng is number
+        && request.resource.data.active == true
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
+    }
+    // Kuzatuv xabarlari kunlik hisobi (kuniga 3 tagacha) — faqat bot
+    match /watchDaily/{id} {
+      allow read, write: if false;
+    }
+
+    // Sinov darsidan keyingi baholar: bot yozadi (faqat qabul qilingan ariza egasi, bir marta).
+    // O'qish — bahoni qo'ygan ota-ona va admin.
+    match /ratings/{id} {
+      allow read: if isTg(resource.data.userTgId) || isAdmin();
+      allow write: if false;
+    }
+
     // Bot ichki holati (yagona nusxa qulfi, rejalashtiruvchi) — faqat bot (Admin SDK) ishlatadi
     match /system/{doc} {
       allow read, write: if false;

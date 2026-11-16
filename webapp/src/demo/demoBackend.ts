@@ -4,7 +4,8 @@ import { centerChatId } from "../lib/backend";
 import { nextLessonMs } from "../lib/format";
 import { RISHTON } from "../lib/geo";
 import { ruleBasedReply } from "../lib/match";
-import type { Application, AppStatus, Center, Chat, Message } from "../lib/types";
+import type { Application, AppStatus, Center, Chat, Message, Watch } from "../lib/types";
+import { WATCH_LIMIT } from "../lib/watch";
 import { DEMO_CENTERS, DEMO_CENTER_REPLIES, DEMO_CHATS, DEMO_MESSAGES, DEMO_REVIEWS } from "./data";
 
 const KEY = "yd-demo-v2";
@@ -27,6 +28,23 @@ function load(): DemoState {
 
 export function createDemoBackend(): Backend {
   const state = load();
+  // Saqlangan qidiruvlar (DEMO — qurilmada)
+  const WKEY = "yd-demo-watches";
+  let watches: Watch[] = [];
+  try {
+    watches = JSON.parse(localStorage.getItem(WKEY) || "[]");
+  } catch {
+    /* bo‘sh */
+  }
+  const watchListeners = new Set<() => void>();
+  const saveWatches = () => {
+    try {
+      localStorage.setItem(WKEY, JSON.stringify(watches));
+    } catch {
+      /* xususiy rejim */
+    }
+    watchListeners.forEach((l) => l());
+  };
   const listeners = new Set<() => void>();
   const typingListeners = new Set<(id: string, t: boolean) => void>();
   const save = () => {
@@ -208,6 +226,21 @@ export function createDemoBackend(): Backend {
       async requestQr() {
         await new Promise((r) => setTimeout(r, 400));
       }
+    },
+    watchWatches(cb) {
+      const emit = () => cb(watches.map((w) => ({ ...w })));
+      watchListeners.add(emit);
+      emit();
+      return () => void watchListeners.delete(emit);
+    },
+    async addWatch(w) {
+      if (watches.length >= WATCH_LIMIT) throw new Error("limit");
+      watches.unshift({ ...w, id: `w${Date.now()}`, createdMs: Date.now() });
+      saveWatches();
+    },
+    async deleteWatch(id) {
+      watches = watches.filter((w) => w.id !== id);
+      saveWatches();
     },
     async requestClaim() {
       await new Promise((r) => setTimeout(r, 400));

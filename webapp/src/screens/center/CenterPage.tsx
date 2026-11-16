@@ -1,7 +1,7 @@
 /* Markaz / repetitor sahifasi: tez amallar, guruhlar, ma’lumot, sharhlar, ariza. */
 import { EmptyState, SeatChip } from "../../components/motion";
 import { AlertTriangle, BellPlus, Clock, Heart, KeyRound, MapPin, MessageCircle, Navigation, Phone, Share, Star, Users } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Rating, UnverifiedBadge } from "../../components/cards";
 import { SubjectIcon } from "../../components/brand";
 import { Avatar, Button, VipBadge } from "../../components/ios/controls";
@@ -9,8 +9,9 @@ import { Section } from "../../components/ios/Grouped";
 import { listItem } from "../../components/ios/motion";
 import { Page } from "../../components/ios/Page";
 import { fmtDate, fmtPriceFrom, fmtSum, groupWhen, isStale, updatedText } from "../../lib/format";
+import { priceLevel, subjectMedians } from "../../lib/price";
 import { distanceKm, formatDistance, routeUrl } from "../../lib/geo";
-import { haptic, openLink, openTelegramLink } from "../../lib/telegram";
+import { haptic, openLink, openTelegramLink, tg } from "../../lib/telegram";
 import type { Review } from "../../lib/types";
 import { IS_DEMO, useApp, useCenter, useOrigin, useProfile, useBotUsername } from "../../store/app";
 import { useNav } from "../../store/nav";
@@ -54,6 +55,8 @@ export function CenterPage({ centerId }: { centerId: string }) {
   const c = useCenter(centerId);
   const BOT_USERNAME = useBotUsername();
   const status = useApp((s) => s.centersStatus);
+  const allCenters = useApp((s) => s.centers);
+  const medians = useMemo(() => subjectMedians(allCenters), [allCenters]);
   const backend = useApp((s) => s.backend);
   const showToast = useApp((s) => s.showToast);
   const favorites = useProfile((s) => s.favorites);
@@ -123,6 +126,15 @@ export function CenterPage({ centerId }: { centerId: string }) {
   const share = () => {
     const link = BOT_USERNAME ? `https://t.me/${BOT_USERNAME}?startapp=c_${c.id}` : location.href;
     const text = `${c.name} — YaqinDars’da`;
+    // Inline rejim yoqilgan bo‘lsa — chatni tanlab, rasmli kartochka («Ochish» tugmasi bilan) yuboriladi
+    if (backend?.inlineEnabled && tg?.switchInlineQuery) {
+      try {
+        tg.switchInlineQuery(`c_${c.id}`, ["users", "groups", "channels"]);
+        return;
+      } catch {
+        /* eski Telegram — oddiy havola */
+      }
+    }
     if (BOT_USERNAME) openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);
     else if (navigator.share) navigator.share({ title: c.name, text, url: link }).catch(() => {});
     else
@@ -210,7 +222,7 @@ export function CenterPage({ centerId }: { centerId: string }) {
             {c.vip && <VipBadge large />}
             {!c.claimed && <UnverifiedBadge large />}
             <span>{c.kind === "tutor" ? "Repetitor" : "O‘quv markazi"}</span>
-            {c.rating ? <Rating value={c.rating} count={c.reviewsCount} /> : null}
+            {c.rating ? <Rating value={c.rating} count={c.reviewsCount} /> : <span className="rounded-full bg-green-soft px-2 py-0.5 text-caption font-semibold text-green-text">Yangi</span>}
           </div>
           <p className="mt-1.5 text-footnote text-ink2">
             <span className="tnum">{formatDistance(km)}</span> · {c.address}
@@ -260,9 +272,23 @@ export function CenterPage({ centerId }: { centerId: string }) {
                   <div className="tnum mt-0.5 flex items-center gap-1.5 text-footnote text-ink2">
                     <Clock size={13} aria-hidden /> {groupWhen(g)}
                   </div>
-                  <div className="mt-2">
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <SeatChip count={g.freeSeats} />
+                    {(() => {
+                      const m = medians.get(g.subject);
+                      const lv = m ? priceLevel(g.price, m.median) : "avg";
+                      return lv === "avg" ? null : (
+                        <span className={`rounded-full px-2 py-0.5 text-caption font-medium ${lv === "cheap" ? "bg-green-soft text-green-text" : "bg-gold-soft text-gold-text"}`}>
+                          {lv === "cheap" ? "O‘rtachadan arzon" : "O‘rtachadan qimmat"}
+                        </span>
+                      );
+                    })()}
                   </div>
+                  {medians.get(g.subject) && (
+                    <div className="tnum mt-1.5 text-caption text-ink3">
+                      Rishtonda {g.subject.toLowerCase()} o‘rtacha ≈ {fmtSum(medians.get(g.subject)!.median)}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="mt-3 flex gap-2">

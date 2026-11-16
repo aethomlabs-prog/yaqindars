@@ -12,6 +12,14 @@ from logic import (
     is_claimed,
     make_claim_code,
     normalize_code,
+    display_rating,
+    inline_search,
+    rating_due,
+    rating_error,
+    watch_key,
+    watch_matches,
+    watch_should_send,
+    watch_title,
     parse_latlng,
     parse_subjects,
     campaign_slug,
@@ -255,6 +263,82 @@ class QuickAddTest(unittest.TestCase):
     def test_campaign(self):
         self.assertEqual(campaign_slug("Flyer"), "flyer")
         self.assertIsNone(campaign_slug("bad slug!"))
+
+
+class WatchTest(unittest.TestCase):
+    CENTER = {"lat": 40.3567, "lng": 71.2845}
+
+    def g(self, **kw):
+        base = {"subject": "Ingliz tili", "days": ["Du", "Ch"], "price": 250000, "freeSeats": 2}
+        base.update(kw)
+        return base
+
+    def test_matches(self):
+        w = {"subject": "Ingliz tili", "maxPrice": 300000, "radiusKm": 3, "days": ["Du", "Ch", "Ju"], "lat": 40.3600, "lng": 71.2800}
+        self.assertTrue(watch_matches(w, self.CENTER, self.g()))
+        self.assertFalse(watch_matches(w, self.CENTER, self.g(freeSeats=0)))
+        self.assertFalse(watch_matches(w, self.CENTER, self.g(subject="Matematika")))
+        self.assertFalse(watch_matches(w, self.CENTER, self.g(price=350000)))
+        self.assertFalse(watch_matches(w, self.CENTER, self.g(price=0)))  # narx noma'lum — max narx shartiga mos emas
+        self.assertFalse(watch_matches(w, self.CENTER, self.g(days=["Du", "Sh"])))
+        far = {**w, "lat": 40.50, "lng": 71.50}
+        self.assertFalse(watch_matches(far, self.CENTER, self.g()))
+
+    def test_empty_watch_matches_any_free_group(self):
+        self.assertTrue(watch_matches({}, self.CENTER, self.g(days=[], price=0)))
+
+    def test_limits_and_repeats(self):
+        w = {"sent": [watch_key("c1", 0)]}
+        self.assertFalse(watch_should_send(w, watch_key("c1", 0), 0))  # takror yo'q
+        self.assertTrue(watch_should_send(w, watch_key("c1", 1), 2))
+        self.assertFalse(watch_should_send(w, watch_key("c1", 1), 3))  # kuniga 3 ta
+
+    def test_title(self):
+        self.assertEqual(watch_title({"subject": "IT", "radiusKm": 2, "maxPrice": 300000, "days": ["Du"]}), "IT · 2 km gacha · 300 ming so‘mgacha · Du")
+        self.assertEqual(watch_title({}), "Istalgan fan")
+
+
+class RatingTest(unittest.TestCase):
+    NOW = datetime(2026, 11, 16, 12, tzinfo=UTC)
+
+    def app(self, **kw):
+        base = {"status": "accepted", "trialAt": self.NOW - timedelta(hours=4), "tgUserId": 5}
+        base.update(kw)
+        return base
+
+    def test_due_3h_after(self):
+        self.assertTrue(rating_due(self.app(), self.NOW))
+        self.assertFalse(rating_due(self.app(trialAt=self.NOW - timedelta(hours=2)), self.NOW))
+        self.assertFalse(rating_due(self.app(ratingAsked=True), self.NOW))
+        self.assertFalse(rating_due(self.app(status="rejected"), self.NOW))
+        self.assertFalse(rating_due(self.app(trialAt=self.NOW - timedelta(days=5)), self.NOW))
+
+    def test_only_owner_once(self):
+        self.assertIsNone(rating_error(self.app(), 5, False))
+        self.assertIn("ariza egasi", rating_error(self.app(), 6, False))
+        self.assertIn("qabul", rating_error(self.app(status="seen"), 5, False))
+        self.assertIn("allaqachon", rating_error(self.app(), 5, True))
+        self.assertIn("allaqachon", rating_error(self.app(rated=True), 5, False))
+
+    def test_display_needs_3(self):
+        self.assertIsNone(display_rating(9, 2))
+        self.assertEqual(display_rating(13, 3), 4.3)
+        self.assertIsNone(display_rating(None, None))
+
+
+class InlineTest(unittest.TestCase):
+    CS = [
+        {"id": "a", "name": "Bilimdon", "vip": False, "groups": [{"subject": "Ingliz tili", "freeSeats": 0}]},
+        {"id": "b", "name": "O‘g‘il Akademiya", "vip": True, "groups": [{"subject": "Matematika", "freeSeats": 2}]},
+        {"id": "c", "name": "Zukko", "vip": False, "groups": [{"subject": "Ingliz tili", "freeSeats": 3}]},
+    ]
+
+    def test_search(self):
+        self.assertEqual([c["id"] for c in inline_search(self.CS, "ingliz")], ["c", "a"])  # bo'sh joyi borlar oldin
+        self.assertEqual([c["id"] for c in inline_search(self.CS, "ogil")], ["b"])  # apostrofsiz ham topadi
+        self.assertEqual([c["id"] for c in inline_search(self.CS, "")], ["b", "c"])  # bo'sh so'rov: faqat bo'sh joyi borlar, VIP oldin
+        self.assertEqual([c["id"] for c in inline_search(self.CS, "c_a")], ["a"])
+        self.assertEqual(inline_search(self.CS, "fizika"), [])
 
 
 if __name__ == "__main__":

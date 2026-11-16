@@ -1,5 +1,5 @@
 /* Ma’lumot qatlami interfeysi. DEMO — lokal; Firebase — Firestore (+ Functions bo‘lsa auth). */
-import type { Application, AppStatus, Center, Chat, Child, Address, Group, Message, Review } from "./types";
+import type { Application, AppStatus, Center, Chat, Child, Address, Group, Message, Review, Watch } from "./types";
 
 export interface ApplyInput {
   center: Center;
@@ -112,6 +112,12 @@ export interface Backend {
   joinWaitlist(centerId: string, groupIndex: number): Promise<void>;
   /** «Bu mening markazim» — admin tasdiqlaydi */
   requestClaim(center: Center): Promise<void>;
+  /** Saqlangan qidiruvlar (bot mos bo‘sh joy ochilganda yozadi; kuniga 3 tagacha) */
+  watchWatches(cb: (w: Watch[]) => void): Unsub;
+  addWatch(w: Omit<Watch, "id" | "createdMs">): Promise<void>;
+  deleteWatch(id: string): Promise<void>;
+  /** Bot inline rejimi yoqilganmi (ulashishda boy kartochka) */
+  inlineEnabled?: boolean;
   /** Ko‘rish / qo‘ng‘iroq / yo‘l bosilishi (xatoga chidamli, jim) */
   track(centerId: string, ev: CenterEvent): void;
 

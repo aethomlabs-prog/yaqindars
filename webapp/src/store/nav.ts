@@ -13,6 +13,7 @@ export type Route =
   | { name: "applications" }
   | { name: "favorites" }
   | { name: "addresses" }
+  | { name: "watches" }
   | { name: "about" };
 
 export interface StackEntry {
