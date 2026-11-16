@@ -1,5 +1,5 @@
 import { Star } from "lucide-react";
-import { fmtSum } from "../lib/format";
+import { fmtPriceFrom, fmtSum } from "../lib/format";
 import { formatDistance } from "../lib/geo";
 import type { Center } from "../lib/types";
 import { useNav } from "../store/nav";
@@ -19,6 +19,15 @@ export function Rating({ value, count }: { value: number | null; count?: number 
   );
 }
 
+/** Admin qo‘shgan, egasi hali tasdiqlamagan markaz */
+export function UnverifiedBadge({ large }: { large?: boolean }) {
+  return (
+    <span className={`inline-flex shrink-0 items-center rounded-full bg-fill font-medium text-ink2 ${large ? "px-2.5 py-1 text-footnote" : "px-1.5 py-px text-caption"}`} title="Ma’lumotni markaz hali tasdiqlamagan">
+      {large ? "Ma’lumot tasdiqlanmagan" : "Tasdiqlanmagan"}
+    </span>
+  );
+}
+
 /** Ro‘yxat kartochkasi (xarita sheet’i, saqlanganlar, qidiruv natijalari) */
 export function CenterRow({ c, km, free, minPrice, subjects, i = 0, onOpen }: { c: Center; km: number; free: number; minPrice: number; subjects: string[]; i?: number; onOpen?: () => void }) {
   const push = useNav((s) => s.push);
@@ -33,12 +42,13 @@ export function CenterRow({ c, km, free, minPrice, subjects, i = 0, onOpen }: { 
         <div className="flex items-center gap-2">
           <span className="truncate text-headline">{c.name}</span>
           {c.vip && <VipBadge />}
+          {!c.claimed && <UnverifiedBadge />}
         </div>
         <div className="mt-0.5 truncate text-footnote text-ink2">
           <span className="tnum">{formatDistance(km)}</span> · {subjects.join(", ")}
         </div>
         <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="tnum text-subhead font-semibold">{fmtSum(minPrice)} dan</span>
+          <span className="tnum text-subhead font-semibold">{fmtPriceFrom(minPrice)}</span>
           <SeatChip count={free} />
         </div>
       </div>
@@ -85,7 +95,7 @@ export function TutorRow({ c, km }: { c: Center; km: number }) {
             {g?.subject} · <Rating value={c.rating} /> · <span className="tnum">{formatDistance(km)}</span>
           </span>
         </span>
-        {g && <span className="tnum shrink-0 text-subhead font-semibold">{Math.round(g.price / 1000)} ming</span>}
+        {g && g.price > 0 && <span className="tnum shrink-0 text-subhead font-semibold">{Math.round(g.price / 1000)} ming</span>}
       </span>
     </button>
   );

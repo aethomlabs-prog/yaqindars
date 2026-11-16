@@ -1,14 +1,14 @@
 /* Markaz / repetitor sahifasi: tez amallar, guruhlar, ma’lumot, sharhlar, ariza. */
 import { EmptyState, SeatChip } from "../../components/motion";
-import { AlertTriangle, BellPlus, Clock, Heart, MapPin, MessageCircle, Navigation, Phone, Share, Star, Users } from "lucide-react";
+import { AlertTriangle, BellPlus, Clock, Heart, KeyRound, MapPin, MessageCircle, Navigation, Phone, Share, Star, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { Rating } from "../../components/cards";
+import { Rating, UnverifiedBadge } from "../../components/cards";
 import { SubjectIcon } from "../../components/brand";
 import { Avatar, Button, VipBadge } from "../../components/ios/controls";
 import { Section } from "../../components/ios/Grouped";
 import { listItem } from "../../components/ios/motion";
 import { Page } from "../../components/ios/Page";
-import { fmtDate, fmtSum, isStale, updatedText } from "../../lib/format";
+import { fmtDate, fmtPriceFrom, fmtSum, groupWhen, isStale, updatedText } from "../../lib/format";
 import { distanceKm, formatDistance, routeUrl } from "../../lib/geo";
 import { haptic, openLink, openTelegramLink } from "../../lib/telegram";
 import type { Review } from "../../lib/types";
@@ -20,7 +20,14 @@ function Action({ icon, label, onClick, href, active }: { icon: ReactNode; label
   const cls = `focus-ring pressable flex flex-1 flex-col items-center gap-1 rounded-[14px] bg-card py-2.5 text-caption ${active ? "text-[#FF3B30]" : "text-tint"}`;
   if (href)
     return (
-      <a href={href} className={cls} onClick={() => haptic.light()}>
+      <a
+        href={href}
+        className={cls}
+        onClick={() => {
+          haptic.light();
+          onClick?.();
+        }}
+      >
         {icon}
         <span>{label}</span>
       </a>
@@ -58,6 +65,12 @@ export function CenterPage({ centerId }: { centerId: string }) {
   const [reviews, setReviews] = useState<Review[] | null>(null);
   const [waiting, setWaiting] = useState<Set<number>>(new Set());
   const [chatBusy, setChatBusy] = useState(false);
+  const [claimState, setClaimState] = useState<"idle" | "busy" | "sent">("idle");
+
+  // Ko‘rishlar hisobi (egasining haftalik hisoboti uchun; sessiyada bir marta)
+  useEffect(() => {
+    if (backend && c) backend.track(c.id, "views");
+  }, [backend, c?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // Sharhlar hozircha faqat DEMO’da (haqiqiy rejimda sharh yozish hali yo‘q)
@@ -119,6 +132,23 @@ export function CenterPage({ centerId }: { centerId: string }) {
         .catch(() => {});
   };
 
+  const claim = async () => {
+    if (!backend?.authed) {
+      showToast("Bu funksiya Telegram ichida ishlaydi.", "info");
+      return;
+    }
+    setClaimState("busy");
+    try {
+      await backend.requestClaim(c);
+      setClaimState("sent");
+      haptic.success();
+      showToast("So‘rov yuborildi — admin markaz telefoniga qo‘ng‘iroq qilib tasdiqlaydi", "ok");
+    } catch {
+      setClaimState("idle");
+      showToast("Yuborib bo‘lmadi. Keyinroq urinib ko‘ring.", "error");
+    }
+  };
+
   const waitlist = async (gi: number) => {
     try {
       await backend?.joinWaitlist(c.id, gi);
@@ -154,7 +184,7 @@ export function CenterPage({ centerId }: { centerId: string }) {
           <div className="blur-bar hairline-t absolute inset-x-0 bottom-0 z-20 flex items-center gap-3 px-4 pt-3" style={{ paddingBottom: "calc(12px + var(--safe-bottom))" }}>
             <div className="min-w-0 flex-1">
               <div className="text-caption text-ink2">Oyiga</div>
-              <div className="tnum truncate text-headline">{fmtSum(minPrice)} dan</div>
+              <div className="tnum truncate text-headline">{fmtPriceFrom(minPrice)}</div>
             </div>
             <Button kind="green" onClick={() => openApply(firstFree)}>
               Bepul sinov darsi
@@ -178,6 +208,7 @@ export function CenterPage({ centerId }: { centerId: string }) {
           <h1 className="mt-3 text-title">{c.name}</h1>
           <div className="mt-1.5 flex flex-wrap items-center justify-center gap-2 text-footnote text-ink2">
             {c.vip && <VipBadge large />}
+            {!c.claimed && <UnverifiedBadge large />}
             <span>{c.kind === "tutor" ? "Repetitor" : "O‘quv markazi"}</span>
             {c.rating ? <Rating value={c.rating} count={c.reviewsCount} /> : null}
           </div>
@@ -188,13 +219,26 @@ export function CenterPage({ centerId }: { centerId: string }) {
 
         {/* Tez amallar */}
         <div className="mx-4 mt-5 flex gap-2">
-          {c.phone && <Action icon={<Phone size={21} />} label="Qo‘ng‘iroq" href={`tel:${c.phone}`} />}
-          <Action icon={<Navigation size={21} />} label="Yo‘l" onClick={() => openLink(routeUrl(c, pos))} />
-          <Action icon={<MessageCircle size={21} />} label={chatBusy ? "…" : "Yozish"} onClick={openChat} />
+          {c.phone && <Action icon={<Phone size={21} />} label="Qo‘ng‘iroq" href={`tel:${c.phone}`} onClick={() => backend?.track(c.id, "calls")} />}
+          <Action
+            icon={<Navigation size={21} />}
+            label="Yo‘l"
+            onClick={() => {
+              backend?.track(c.id, "routes");
+              openLink(routeUrl(c, pos));
+            }}
+          />
+          {c.claimed && <Action icon={<MessageCircle size={21} />} label={chatBusy ? "…" : "Yozish"} onClick={openChat} />}
           <Action icon={<Share size={21} />} label="Ulashish" onClick={share} />
         </div>
 
-        {stale && (
+        {!c.claimed && (
+          <div className="mx-4 mt-4 rounded-card bg-card p-3.5 text-footnote text-ink2" role="note">
+            Bu markazni YaqinDars jamoasi qo‘shgan, markaz hali ma’lumotni tasdiqlamagan. Narx va dars vaqtini qo‘ng‘iroq qilib aniqlang.
+          </div>
+        )}
+
+        {c.claimed && stale && (
           <div className="mx-4 mt-4 flex gap-3 rounded-card bg-gold-soft p-3.5 text-footnote text-gold-text" role="note">
             <AlertTriangle size={18} className="mt-0.5 shrink-0" aria-hidden />
             <span>Ma’lumot eskirgan bo‘lishi mumkin — yozilishdan oldin qo‘ng‘iroq qilib aniqlang.</span>
@@ -211,10 +255,10 @@ export function CenterPage({ centerId }: { centerId: string }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-headline">{g.subject}</span>
-                    <span className="tnum shrink-0 text-headline">{fmtSum(g.price)}</span>
+                    <span className="tnum shrink-0 text-headline">{g.price > 0 ? fmtSum(g.price) : "Narxini so‘rang"}</span>
                   </div>
                   <div className="tnum mt-0.5 flex items-center gap-1.5 text-footnote text-ink2">
-                    <Clock size={13} aria-hidden /> {g.days.join(", ")} · {g.time}
+                    <Clock size={13} aria-hidden /> {groupWhen(g)}
                   </div>
                   <div className="mt-2">
                     <SeatChip count={g.freeSeats} />
@@ -306,6 +350,16 @@ export function CenterPage({ centerId }: { centerId: string }) {
               ))}
             </div>
           </>
+        )}
+
+        {!c.claimed && (
+          <div className="mx-4 mt-7 rounded-card bg-card p-4 text-center shadow-card">
+            <p className="text-headline">Bu sizning markazingizmi?</p>
+            <p className="mt-1 text-footnote text-ink2">Egallang: bo‘sh joy va narxlarni o‘zingiz yangilaysiz, arizalar to‘g‘ridan-to‘g‘ri sizga keladi. Birinchi oy bepul.</p>
+            <Button kind="tinted" size="md" className="mt-3 w-full" disabled={claimState !== "idle"} loading={claimState === "busy"} onClick={claim}>
+              <KeyRound size={17} aria-hidden /> {claimState === "sent" ? "So‘rov yuborildi" : "Bu mening markazim"}
+            </Button>
+          </div>
         )}
 
         {/* Sharhlar */}

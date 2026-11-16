@@ -29,6 +29,10 @@ export interface OwnerCenter extends Center {
   createdMs: number;
   /** admin to‘lovni qabul qilgach — shu sanagacha to‘langan */
   paidUntilMs: number | null;
+  /** egasi markazni egallagan vaqt (admin qo‘shgan markazlar uchun bepul oy shundan) */
+  claimedMs?: number | null;
+  /** to‘lov 7+ kun kechikkani uchun xaritadan yashirilgan */
+  hidden?: boolean;
 }
 
 /** Admin dashboard */
@@ -43,6 +47,14 @@ export interface AdminLog {
   screen: string;
   device: string;
   createdMs: number;
+}
+export interface QuickCenterInput {
+  name: string;
+  lat: number;
+  lng: number;
+  phone: string;
+  subjects: string[];
+  price: number;
 }
 export interface AdminCounts {
   chats: number;
@@ -59,6 +71,8 @@ export interface AdminApi {
   setCenter(c: AdminCenter, patch: { status: "approved" | "rejected"; vip: boolean }): Promise<void>;
   /** To‘lov qabul qilindi: muddatni +months oyga uzaytiradi (yangi paidUntilMs ni qaytaradi) */
   markPaid(c: AdminCenter, months: number): Promise<number>;
+  /** Tez qo‘shish: egasiz markaz (source: "admin", claimed: false) — yangi ID */
+  addCenter(input: QuickCenterInput): Promise<string>;
 }
 
 export interface OwnerApi {
@@ -66,7 +80,12 @@ export interface OwnerApi {
   saveGroups(centerId: string, groups: Group[]): Promise<void>;
   watchCenterApplications(centerId: string, cb: (a: Application[]) => void): Unsub;
   setApplicationStatus(app: Application, status: AppStatus, trialMs: number | null): Promise<void>;
+  /** Bot QR posterini (PNG) Telegram’ga yuboradi */
+  requestQr(centerId: string): Promise<void>;
 }
+
+/** Markaz sahifasidagi hodisalar — kunlik agregat hisoblagich (har biri alohida hujjat emas) */
+export type CenterEvent = "views" | "calls" | "routes";
 
 export interface Backend {
   mode: "demo" | "firebase";
@@ -91,6 +110,10 @@ export interface Backend {
   submitApplication(input: ApplyInput): Promise<Application>;
   watchApplications(cb: (apps: Application[]) => void): Unsub;
   joinWaitlist(centerId: string, groupIndex: number): Promise<void>;
+  /** «Bu mening markazim» — admin tasdiqlaydi */
+  requestClaim(center: Center): Promise<void>;
+  /** Ko‘rish / qo‘ng‘iroq / yo‘l bosilishi (xatoga chidamli, jim) */
+  track(centerId: string, ev: CenterEvent): void;
 
   /** Auth bo‘lsa — bulutdan profil; aks holda null (lokal qoladi) */
   loadProfile(): Promise<Partial<ProfileDoc> | null>;

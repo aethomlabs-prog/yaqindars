@@ -6,7 +6,7 @@ import { SubjectIcon } from "../../components/brand";
 import { Button, SearchBar, VipBadge } from "../../components/ios/controls";
 import { listItem } from "../../components/ios/motion";
 import { Page } from "../../components/ios/Page";
-import { fmtDayLabel, fmtSum, fmtTime } from "../../lib/format";
+import { fmtDayLabel, fmtPriceFrom, fmtTime } from "../../lib/format";
 import { distanceKm, formatDistance, routeUrl } from "../../lib/geo";
 import { openLink, openTelegramLink } from "../../lib/telegram";
 import { displayName, IS_DEMO, useApp, useApplications, useCenter, useOrigin, useBotUsername } from "../../store/app";
@@ -96,7 +96,7 @@ function VipCarousel({ items }: { items: { c: import("../../lib/types").Center; 
               <span className="text-ink2">
                 <span className="tnum">{formatDistance(km)}</span> · {[...new Set(c.groups.map((g) => g.subject))].join(", ")}
               </span>
-              <span className="tnum font-semibold">{fmtSum(Math.min(...c.groups.map((g) => g.price)))} dan</span>
+              <span className="tnum font-semibold">{fmtPriceFrom(Math.min(...c.groups.map((g) => g.price)))}</span>
             </div>
           </button>
         ))}

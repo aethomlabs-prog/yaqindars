@@ -20,6 +20,9 @@ import {
   Star,
   Wallet,
   Banknote,
+  Copy,
+  Plus,
+  UserX,
   X,
   XCircle
 } from "lucide-react";
@@ -35,6 +38,7 @@ import { haptic, inTelegram, openTelegramLink } from "../lib/telegram";
 import type { Application, AppStatus } from "../lib/types";
 import { useApp } from "../store/app";
 import { BarChart, HBars, StatusBars, TableView, type Point } from "./charts";
+import { QuickAddSheet } from "./QuickAddSheet";
 
 type Tab = "overview" | "centers" | "apps" | "logs";
 type App = Application & { tgUsername: string | null };
@@ -110,6 +114,13 @@ function CenterRow({
   onPaid: () => void;
 }) {
   const free = c.groups.reduce((s, g) => s + g.freeSeats, 0);
+  const ownerless = !c.ownerTgId;
+  const showToast = useApp((s) => s.showToast);
+  const copyCode = () =>
+    navigator.clipboard
+      ?.writeText(`/claimcode ${c.id}`)
+      .then(() => showToast("Buyruq nusxalandi — botga yuboring, egasi uchun kod beradi", "ok"))
+      .catch(() => showToast(`Botga yozing: /claimcode ${c.id}`, "info"));
   return (
     <div className="flex flex-col gap-3 rounded-[16px] bg-card2 p-3.5 lg:flex-row lg:items-center">
       <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -118,7 +129,14 @@ function CenterRow({
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-headline">{clean(c.name)}</span>
             {c.vip && <VipBadge />}
-            <BillingChip c={c} />
+            {ownerless ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-fill px-2 py-0.5 text-caption text-ink2">
+                <UserX size={12} aria-hidden /> Egasiz
+              </span>
+            ) : (
+              <BillingChip c={c} />
+            )}
+            {c.hidden && <span className="inline-flex items-center rounded-full bg-red-soft px-2 py-0.5 text-caption text-red-text">Yashirilgan</span>}
             {!c.approved && (
               <span className="inline-flex items-center gap-1 rounded-full bg-gold-soft px-2 py-0.5 text-caption text-gold-text">
                 <Hourglass size={12} aria-hidden /> Kutilmoqda
@@ -152,6 +170,10 @@ function CenterRow({
               <Check size={17} aria-hidden /> Tasdiqlash{c.tariff === "vip" ? " (VIP)" : ""}
             </Button>
           </>
+        ) : ownerless ? (
+          <Button kind="tinted" size="md" onClick={copyCode}>
+            <Copy size={17} aria-hidden /> Egasi uchun kod
+          </Button>
         ) : (
           <>
             <Button kind="green" size="md" disabled={busy} onClick={onPaid}>
@@ -182,7 +204,8 @@ export default function AdminApp() {
   const [busyId, setBusyId] = useState<string | null>(null);
   // filtrlar
   const [cq, setCq] = useState("");
-  const [cf, setCf] = useState<"all" | "pending" | "approved" | "vip" | "overdue">("all");
+  const [cf, setCf] = useState<"all" | "pending" | "approved" | "vip" | "overdue" | "ownerless">("all");
+  const [quickOpen, setQuickOpen] = useState(false);
   const [aq, setAq] = useState("");
   const [af, setAf] = useState<AppStatus | "all">("all");
 
@@ -215,13 +238,14 @@ export default function AdminApp() {
     const approved = cs.filter((c) => c.approved);
     const pending = cs.filter((c) => !c.approved);
     const vip = approved.filter((c) => c.vip);
-    const mrr = approved.reduce((s, c) => s + (c.vip || c.tariff === "vip" ? PRICE.vip : PRICE.oddiy), 0);
-    const overdue = approved.filter((c) => billingOf(c).state === "overdue");
+    const mrr = approved.filter((c) => !!c.ownerTgId).reduce((s, c) => s + (c.vip || c.tariff === "vip" ? PRICE.vip : PRICE.oddiy), 0);
+    const overdue = approved.filter((c) => !!c.ownerTgId && billingOf(c).state === "overdue");
+    const ownerless = cs.filter((c) => !c.ownerTgId).length;
     const by = (st: AppStatus) => periodApps.filter((a) => a.status === st).length;
     const decided = by("accepted") + by("rejected");
     const today = apps.filter((a) => a.createdMs >= new Date().setHours(0, 0, 0, 0)).length;
     const errors24 = logs.filter((l) => l.createdMs >= Date.now() - DAY).length;
-    return { total: cs.length, approved: approved.length, pending, overdue, vip: vip.length, mrr, by, rate: decided ? Math.round((by("accepted") / decided) * 100) : null, today, errors24 };
+    return { total: cs.length, approved: approved.length, pending, overdue, ownerless, vip: vip.length, mrr, by, rate: decided ? Math.round((by("accepted") / decided) * 100) : null, today, errors24 };
   }, [centers, periodApps, apps, logs]);
 
   const daily: Point[] = useMemo(() => {
@@ -299,7 +323,7 @@ export default function AdminApp() {
   const filteredCenters = useMemo(() => {
     const q = cq.trim().toLowerCase();
     return (centers ?? [])
-      .filter((c) => (cf === "pending" ? !c.approved : cf === "approved" ? c.approved : cf === "vip" ? c.vip : cf === "overdue" ? c.approved && billingOf(c).state === "overdue" : true))
+      .filter((c) => (cf === "pending" ? !c.approved : cf === "approved" ? c.approved : cf === "vip" ? c.vip : cf === "overdue" ? c.approved && !!c.ownerTgId && billingOf(c).state === "overdue" : cf === "ownerless" ? !c.ownerTgId : true))
       .filter((c) => !q || c.name.toLowerCase().includes(q) || c.address.toLowerCase().includes(q) || (c.ownerUsername ?? "").toLowerCase().includes(q))
       .sort((a, b) => Number(a.approved) - Number(b.approved) || b.createdMs - a.createdMs);
   }, [centers, cq, cf]);
@@ -407,6 +431,9 @@ export default function AdminApp() {
                   ]}
                 />
               </div>
+              <Button size="md" kind="green" onClick={() => setQuickOpen(true)}>
+                <Plus size={17} aria-hidden /> <span className="hidden sm:inline">Markaz qo‘shish</span>
+              </Button>
               <button aria-label="Yangilash" onClick={load} className="focus-ring pressable flex h-9 w-9 items-center justify-center rounded-full bg-card text-tint shadow-card">
                 <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
               </button>
@@ -482,7 +509,8 @@ export default function AdminApp() {
                       ["pending", `Kutilmoqda ${stats.pending.length}`],
                       ["approved", `Tasdiqlangan ${stats.approved}`],
                       ["vip", `VIP ${stats.vip}`],
-                      ["overdue", `Muddati o‘tgan ${stats.overdue.length}`]
+                      ["overdue", `Muddati o‘tgan ${stats.overdue.length}`],
+                      ["ownerless", `Egasiz ${stats.ownerless}`]
                     ] as const
                   ).map(([k, l]) => (
                     <Chip key={k} active={cf === k} onClick={() => setCf(k)}>
@@ -602,6 +630,16 @@ export default function AdminApp() {
           )}
         </main>
       </div>
+      <QuickAddSheet
+        open={quickOpen}
+        onClose={() => setQuickOpen(false)}
+        onSaved={(id, name) => {
+          setQuickOpen(false);
+          haptic.success();
+          showToast(`«${name}» xaritaga qo‘shildi. Egasi uchun kod: botda /claimcode ${id}`, "ok");
+          load();
+        }}
+      />
       <OfflineBanner />
     </div>
   );

@@ -1,7 +1,7 @@
 /* Ta’lim beruvchi kabineti (bot: «🎓 Ta’lim beruvchi bo‘lib kirish» → ?mode=owner).
  * Markazlarim → statistika, arizalar (Ko‘rdim / Qabul / Rad), guruhlar (bo‘sh joy ➖/➕, narx). */
 import { EmptyState, SkeletonList } from "../components/motion";
-import { AlertTriangle, CalendarClock, Check, ClipboardList, Crown, Eye, Gift, Hourglass, Map, Minus, Phone, Plus, Send, Users, Wallet, X } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, ClipboardList, Copy, Crown, EyeOff, Eye, Gift, Hourglass, Map, Minus, Phone, Plus, QrCode, Send, Share, Users, Wallet, X } from "lucide-react";
 import { ADMIN_PHONE, ADMIN_TELEGRAM, TARIFF_PRICE } from "../../config";
 import { billingOf } from "../lib/billing";
 import { useEffect, useMemo, useState } from "react";
@@ -14,7 +14,7 @@ import type { OwnerCenter } from "../lib/backend";
 import { fmtDate, fmtDayLabel, fmtListTime, fmtSum, fmtTime, nextLessonMs } from "../lib/format";
 import { haptic, inTelegram, openTelegramLink, tg, tgUser } from "../lib/telegram";
 import type { Application, AppStatus, Group } from "../lib/types";
-import { useApp } from "../store/app";
+import { useApp, useBotUsername } from "../store/app";
 
 const STATUS: Record<AppStatus, { label: string; cls: string }> = {
   new: { label: "Yangi", cls: "bg-tint text-white" },
@@ -146,7 +146,9 @@ Markaz ID: ${c.id}`);
     pending: { icon: <Hourglass size={16} />, cls: "bg-gold-soft text-gold-text", title: "Admin tekshiruvida", text: `Tasdiqlangach ${30} kun bepul ishlaydi.` },
     trial: { icon: <Gift size={16} />, cls: "bg-green-soft text-green-text", title: `Bepul sinov oyi — ${b.days} kun qoldi`, text: `Birinchi to‘lov: ${fmtDate(b.until)} gacha` },
     active: { icon: <Check size={16} />, cls: "bg-green-soft text-green-text", title: "Faol", text: `${fmtDate(b.until)} gacha to‘langan (${b.days} kun)` },
-    overdue: { icon: <AlertTriangle size={16} />, cls: "bg-red-soft text-red-text", title: "To‘lov muddati o‘tgan", text: `${fmtDate(b.until)} da tugagan — xaritada qolish uchun to‘lang` }
+    overdue: c.hidden
+      ? { icon: <EyeOff size={16} />, cls: "bg-red-soft text-red-text", title: "Xaritadan vaqtincha yashirilgan", text: `To‘lov ${fmtDate(b.until)} da tugagan. Ma’lumotlar saqlangan — to‘lovdan keyin darhol qaytadi` }
+      : { icon: <AlertTriangle size={16} />, cls: "bg-red-soft text-red-text", title: "To‘lov muddati o‘tgan", text: `${fmtDate(b.until)} da tugagan — 7 kun ichida to‘lanmasa, xaritadan yashiriladi` }
   }[b.state];
 
   return (
@@ -192,6 +194,61 @@ Markaz ID: ${c.id}`);
         </a>
         . To‘lovdan keyin admin muddatingizni uzaytiradi.
       </p>
+    </div>
+  );
+}
+
+/** «📲 Mening QR’im»: markaz havolasi (t.me/BOT?startapp=c_ID) va chop etiladigan QR poster (bot yuboradi) */
+function QrCard({ c }: { c: OwnerCenter }) {
+  const owner = useApp((s) => s.backend?.owner);
+  const showToast = useApp((s) => s.showToast);
+  const bot = useBotUsername();
+  const [busy, setBusy] = useState(false);
+  const link = bot ? `https://t.me/${bot}?startapp=c_${c.id}` : "";
+  const name = c.name.replace(/^Namuna:\s*/, "");
+  const send = async () => {
+    if (!owner) return;
+    setBusy(true);
+    try {
+      await owner.requestQr(c.id);
+      haptic.success();
+      showToast("QR poster botga yuborildi — Telegram chatini oching", "ok");
+    } catch {
+      showToast("Yuborib bo‘lmadi. Botda /qr yozing.", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copy = () =>
+    navigator.clipboard
+      ?.writeText(link)
+      .then(() => (haptic.light(), showToast("Havola nusxalandi", "ok")))
+      .catch(() => showToast("Nusxalab bo‘lmadi", "error"));
+  const share = () => openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(`${name} — bepul sinov darsiga yoziling`)}`);
+  return (
+    <div className="mx-4 mt-3 rounded-card bg-card p-4 shadow-card">
+      <h2 className="flex items-center gap-2 text-headline">
+        <QrCode size={18} className="text-tint" aria-hidden /> Mening QR’im
+      </h2>
+      <p className="mt-1 text-footnote text-ink2">Eshikka, e’lonlarga, Instagram’ga joylang — skanerlagan ota-ona to‘g‘ri markazingiz sahifasiga tushadi.</p>
+      {link && (
+        <div className="tnum mt-3 truncate rounded-[10px] bg-card2 px-3 py-2 font-mono text-footnote" title={link}>
+          {link.replace("https://", "")}
+        </div>
+      )}
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <Button size="md" className="flex-1" loading={busy} disabled={!owner} onClick={send}>
+          <QrCode size={17} aria-hidden /> QR posterni olish (PNG)
+        </Button>
+        <div className="flex gap-2">
+          <Button kind="tinted" size="md" className="flex-1" disabled={!link} onClick={copy}>
+            <Copy size={17} aria-hidden /> Nusxalash
+          </Button>
+          <Button kind="tinted" size="md" className="flex-1" disabled={!link} onClick={share}>
+            <Share size={17} aria-hidden /> Ulashish
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -309,9 +366,9 @@ export default function OwnerApp() {
                   <span className="min-w-0 flex-1 truncate text-headline">{center.name}</span>
                   {center.vip && <VipBadge />}
                 </div>
-                <div className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-caption ${center.approved ? "bg-green-soft text-green-text" : "bg-gold-soft text-gold-text"}`}>
-                  {center.approved ? <Check size={13} strokeWidth={3} aria-hidden /> : <Hourglass size={13} aria-hidden />}
-                  {center.approved ? "Xaritada ko‘rinmoqda" : "Admin tekshiruvida"}
+                <div className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-caption ${center.hidden ? "bg-red-soft text-red-text" : center.approved ? "bg-green-soft text-green-text" : "bg-gold-soft text-gold-text"}`}>
+                  {center.hidden ? <EyeOff size={13} aria-hidden /> : center.approved ? <Check size={13} strokeWidth={3} aria-hidden /> : <Hourglass size={13} aria-hidden />}
+                  {center.hidden ? "Xaritadan yashirilgan" : center.approved ? "Xaritada ko‘rinmoqda" : "Admin tekshiruvida"}
                 </div>
                 {center.tariff && (
                   <div className="tnum mt-2 text-footnote text-ink2">
@@ -321,6 +378,7 @@ export default function OwnerApp() {
               </div>
 
               <AccountCard c={center} />
+              {center.approved && <QrCard c={center} />}
 
               <div className="mx-4 mt-3 flex gap-2.5">
                 <Stat icon={<ClipboardList size={17} />} value={stats.fresh} label="Yangi ariza" tone="#1E6FD9" />

@@ -94,3 +94,9 @@ export function normalizePhone(masked: string): string | null {
   if (d.length === 9) d = "998" + d;
   return /^998\d{9}$/.test(d) ? "+" + d : null;
 }
+
+/** «250 000 so‘m dan» yoki narx noma’lum bo‘lsa (admin tez qo‘shgan markaz) — «Narxini so‘rang» */
+export const fmtPriceFrom = (n: number) => (n > 0 && Number.isFinite(n) ? `${fmtSum(n)} dan` : "Narxini so‘rang");
+/** Guruh vaqti: «Du, Ch · 16:00–17:30» yoki «Vaqtini qo‘ng‘iroq qilib aniqlang» */
+export const groupWhen = (g: { days: string[]; time: string }) =>
+  g.days.length || g.time ? [g.days.join(", "), g.time].filter(Boolean).join(" · ") : "Vaqtini qo‘ng‘iroq qilib aniqlang";

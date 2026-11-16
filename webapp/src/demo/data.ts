@@ -4,7 +4,7 @@ import type { Center, Chat, Message, Review } from "../lib/types";
 const DAY = 86400000;
 const now = Date.now();
 
-type Raw = Omit<Center, "reviewsCount" | "photoUrl" | "kind" | "updatedMs" | "description" | "ageFrom" | "ageTo" | "teachers"> &
+type Raw = Omit<Center, "reviewsCount" | "photoUrl" | "kind" | "updatedMs" | "description" | "ageFrom" | "ageTo" | "teachers" | "claimed"> &
   Partial<Center> & { age?: number };
 
 function c(x: Raw & { daysOld: number }): Center {
@@ -16,6 +16,7 @@ function c(x: Raw & { daysOld: number }): Center {
     ageFrom: null,
     ageTo: null,
     teachers: [],
+    claimed: true,
     ...x,
     updatedMs: now - x.daysOld * DAY
   };
@@ -130,6 +131,15 @@ const BASE_CENTERS: Center[] = [
     phone: "+998900000013", vip: false, rating: 4.8, reviewsCount: 11, daysOld: 6, ageFrom: 6, ageTo: 12,
     amenities: ["Uyda dars"], description: "Ona tili va o‘qish savodxonligi, boshlang‘ich sinflar uchun.",
     groups: [{ subject: "Ona tili", days: ["Se", "Pa", "Sh"], time: "10:00–11:00", price: 200000, freeSeats: 3 }]
+  }),
+  // Admin tez qo‘shgan, egasi hali ulanmagan markaz (kun/vaqt noma’lum)
+  c({
+    id: "demo12", name: "Namuna: Zukko o‘quv markazi", address: "Xaritada ko‘rsatilgan", lat: 40.3625, lng: 71.2765,
+    phone: "+998900000014", vip: false, rating: null, daysOld: 12, claimed: false, amenities: [],
+    groups: [
+      { subject: "Ingliz tili", days: [], time: "", price: 220000, freeSeats: 0 },
+      { subject: "Matematika", days: [], time: "", price: 220000, freeSeats: 0 }
+    ]
   })
 ];
 

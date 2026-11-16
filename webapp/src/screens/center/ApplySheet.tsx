@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { SubjectIcon } from "../../components/brand";
 import { Button, Chip } from "../../components/ios/controls";
 import { Sheet } from "../../components/ios/Sheet";
-import { fmtSum, maskPhone, normalizePhone } from "../../lib/format";
+import { fmtSum, groupWhen, maskPhone, normalizePhone } from "../../lib/format";
 import { haptic, inTelegram, tgUser, useMainButton } from "../../lib/telegram";
 import type { Center } from "../../lib/types";
 import { submitApplication, useApp, useProfile } from "../../store/app";
@@ -126,7 +126,7 @@ export function ApplySheet({ center, groupIndex, open, onClose }: { center: Cent
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-headline">{x.subject}</span>
                       <span className="tnum block truncate text-footnote text-ink2">
-                        {x.days.join(", ")} · {x.time} · {fmtSum(x.price)}
+                        {groupWhen(x)} · {x.price > 0 ? fmtSum(x.price) : "narxini so‘rang"}
                       </span>
                     </span>
                     <SeatChip count={x.freeSeats} />
@@ -189,7 +189,7 @@ export function ApplySheet({ center, groupIndex, open, onClose }: { center: Cent
       text={`${center.name.replace(/^Namuna:\s*/, "")} siz bilan tez orada bog‘lanadi`}
       details={[
         { label: "Markaz", value: center.name.replace(/^Namuna:\s*/, "") },
-        { label: "Guruh", value: g ? `${g.subject} · ${g.time.split("–")[0]}` : "—" },
+        { label: "Guruh", value: g ? [g.subject, g.time.split("–")[0]].filter(Boolean).join(" · ") : "—" },
         { label: "Sinov darsi", value: "Markaz tasdiqlaydi" }
       ]}
       actionLabel="Arizalarimni ko‘rish"

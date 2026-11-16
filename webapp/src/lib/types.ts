@@ -36,6 +36,8 @@ export interface Center {
   groups: Group[];
   teachers: Teacher[];
   updatedMs: number;
+  /** false — admin qo‘shgan, egasi hali yo‘q («Ma’lumot tasdiqlanmagan») */
+  claimed: boolean;
 }
 
 export type AppStatus = "new" | "seen" | "accepted" | "rejected";

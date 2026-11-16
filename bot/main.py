@@ -19,7 +19,7 @@ import os
 import sys
 from datetime import datetime, timedelta, timezone
 from html import escape
-from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 
@@ -111,6 +111,7 @@ from aiogram.fsm.context import FSMContext  # noqa: E402
 from aiogram.fsm.state import State, StatesGroup  # noqa: E402
 from aiogram.types import (  # noqa: E402
     BotCommand,
+    BufferedInputFile,
     BotCommandScopeChat,
     ErrorEvent,
     CallbackQuery,
@@ -126,7 +127,28 @@ from firebase_admin import auth as fb_auth, credentials, firestore  # noqa: E402
 from google.cloud.firestore_v1.base_query import FieldFilter  # noqa: E402
 
 import ops  # noqa: E402
-from logic import due_daily, local_date  # noqa: E402
+from google.api_core.exceptions import AlreadyExists  # noqa: E402
+from logic import (  # noqa: E402
+    CAMPAIGNS,
+    billing_action,
+    campaign_slug,
+    claim_code_error,
+    due_daily,
+    due_weekly,
+    fmt_change,
+    is_claimed,
+    local_date,
+    make_claim_code,
+    normalize_code,
+    parse_latlng,
+    parse_subjects,
+    remind_key,
+    sum_stats,
+    week_dates,
+    weekly_tip,
+    CODE_TTL,
+)
+from poster import make_poster  # noqa: E402
 from parsers import (  # noqa: E402
     TARIFF_PRICES,
     AI_SYSTEM,
@@ -1041,6 +1063,8 @@ async def on_app_status(call: CallbackQuery, bot: Bot):
         if trial:
             upd["trialAt"] = trial
     await asyncio.to_thread(APPS.document(app_id).update, upd)
+    if status == "accepted" and app.get("status") != "accepted":
+        await asyncio.to_thread(bump_stat, str(app.get("centerId", "")), "accepted")
 
     try:
         await call.message.edit_text(f"{call.message.html_text}\n\n<b>{APP_STATUS_TEXT[status]}</b>", reply_markup=app_kb(app_id, status))
@@ -1222,10 +1246,14 @@ async def on_error(event: ErrorEvent):
 async def admin_dashboard(message: Message):
     if not is_admin(message.from_user.id):
         return
-    kb = InlineKeyboardMarkup(inline_keyboard=[[ibtn("📊 Admin panelni ochish", ADMIN_URL, "primary")]])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [ibtn("📊 Admin panelni ochish", ADMIN_URL, "primary")],
+        [InlineKeyboardButton(text="➕ Markaz qo‘shish", callback_data="aa:new", style="success")],
+    ])
     await message.answer(
         "📊 <b>Admin panel</b>\n\nMarkazlar, arizalar, daromad, AI va xatolar — bitta oynada. "
-        "Kompyuterdagi Telegram’da keng oynada qulayroq.",
+        "Kompyuterdagi Telegram’da keng oynada qulayroq.\n\n"
+        "<code>/claimcode markazId</code> — egasi uchun kod\n<code>/link kanal</code> — kampaniya havolasi\n/backup — zaxira nusxa",
         reply_markup=kb,
     )
 
@@ -1331,6 +1359,10 @@ async def notify_application(bot: Bot, ref):
             log.warning("Ariza %s: markaz topilmadi (%s)", ref.id, data.get("centerId"))
             return
         c = as_dict(center)
+        await asyncio.to_thread(bump_stat, center.id, "apps")
+        if not c.get("ownerTgId"):
+            await notify_admins_ownerless_app(bot, center.id, c, data)
+            return
         user = f"\n💬 @{escape(str(data['tgUsername']))}" if data.get("tgUsername") else ""
         text = (
             "🔔 <b>Yangi ariza — bepul sinov darsi</b>\n\n"
@@ -1517,6 +1549,7 @@ async def notify_status_from_web(bot: Bot, ref):
         return  # boshqa hodisa allaqachon yubordi
     name = escape(str(a.get("centerName", "")))
     if st == "accepted":
+        await asyncio.to_thread(bump_stat, str(a.get("centerId", "")), "accepted")
         t = a.get("trialAt")
         when = f"\n🗓 Sinov darsi: <b>{t.astimezone(TASHKENT).strftime('%d.%m, %H:%M')}</b>" if isinstance(t, datetime) else ""
         await notify_user(bot, a.get("tgUserId"), f"✅ <b>{name}</b> arizangizni qabul qildi!{when}\nMarkaz siz bilan telefon orqali bog‘lanadi.")
@@ -1811,6 +1844,513 @@ async def supervise_watchers(watchers: dict, factories: dict):
                 log.warning("Kuzatuvchini tiklab bo'lmadi (%s): %s — keyingi tekshiruvda yana urinaman", name, e)
 
 
+# ======================= Markazlar: tez qo'shish, egallash, QR, hisobot, to'lov =======================
+CLAIM_REQS = db.collection("claimRequests")  # ilovadagi «Bu mening markazim»
+CLAIM_CODES = db.collection("claimCodes")  # admin bergan bir martalik kodlar
+BOT_REQS = db.collection("botRequests")  # ilovadan botga topshiriq (QR yuborish va h.k.)
+CENTER_STATS = db.collection("centerStats")  # kunlik agregat: {cid}_{sana}: views, calls, routes, apps, accepted
+BOT_USERNAME = "yaqindars_bot"  # main() da get_me() bilan yangilanadi
+
+
+def center_link(cid: str) -> str:
+    return f"https://t.me/{BOT_USERNAME}?startapp=c_{cid}"
+
+
+def campaign_link(slug: str) -> str:
+    return f"https://t.me/{BOT_USERNAME}?startapp=src_{slug}"
+
+
+def clean_name(name) -> str:
+    return str(name or "").replace("Namuna:", "").strip()
+
+
+def bump_stat(cid: str, field: str, n: int = 1):
+    """Kunlik hisoblagich (har hodisa alohida hujjat emas): centerStats/{cid}_{Toshkent sanasi}.{field} += n."""
+    if not cid or "/" in cid:
+        return
+    date = local_date(datetime.now(timezone.utc))
+    try:
+        CENTER_STATS.document(f"{cid}_{date}").set({"centerId": cid, "date": date, field: firestore.Increment(n)}, merge=True)
+    except Exception as e:  # noqa: BLE001
+        log.info("Statistika yozilmadi (%s.%s): %s", cid, field, e)
+
+
+def owner_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="🎓 Kabinetni ochish", web_app=WebAppInfo(url=OWNER_URL), style="primary")
+    ]])
+
+
+def pay_url(c: dict, cid: str) -> str:
+    tariff = "VIP" if c.get("vip") or c.get("tariff") == "vip" else "Oddiy"
+    price = TARIFF_PRICES["vip" if tariff == "VIP" else "oddiy"]
+    text = f"Assalomu alaykum! YaqinDars to‘lovi.\nMarkaz: {clean_name(c.get('name'))}\nTarif: {tariff} — {fmt_sum(price)}/oy\nMarkaz ID: {cid}"
+    return f"https://t.me/{ADMIN_TG}?text={quote(text)}"
+
+
+# ---------------- Admin: markazni tez qo'shish (/admin → «➕ Markaz qo‘shish») ----------------
+class AdminAdd(StatesGroup):
+    name = State()
+    location = State()
+    phone = State()
+    subjects = State()
+    price = State()
+
+
+@router.callback_query(F.data == "aa:new")
+async def admin_add_start(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        return await call.answer()
+    await state.clear()
+    await state.set_state(AdminAdd.name)
+    await call.message.answer("➕ <b>Markazni tez qo‘shish</b> (5 qadam)\n\n1/5. Markaz yoki repetitor nomi?\n\nBekor qilish: /cancel")
+    await call.answer()
+
+
+@router.message(AdminAdd.name, TEXT)
+async def admin_add_name(message: Message, state: FSMContext):
+    name = " ".join(message.text.split())[:100]
+    if len(name) < 2:
+        return await message.answer("Nom juda qisqa. Qaytadan yozing:")
+    await state.update_data(name=name)
+    await state.set_state(AdminAdd.location)
+    kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="📍 Hozirgi joylashuvim", request_location=True)]], resize_keyboard=True, one_time_keyboard=True)
+    await message.answer(
+        "2/5. <b>Xaritadagi joyi.</b>\n📎 → <b>Joylashuv</b> → pinni markaz ustiga surib yuboring.\n"
+        "Yoki Google/Yandex xarita havolasini, yoki «40.3567, 71.2845» ko‘rinishida koordinata yozing.",
+        reply_markup=kb,
+    )
+
+
+@router.message(AdminAdd.location, F.location | TEXT)
+async def admin_add_location(message: Message, state: FSMContext):
+    if message.location:
+        lat, lng = message.location.latitude, message.location.longitude
+    else:
+        p = parse_latlng(message.text)
+        if not p:
+            return await message.answer("Koordinata topilmadi. Joylashuv yuboring yoki «40.3567, 71.2845» deb yozing.")
+        lat, lng = p
+    await state.update_data(lat=lat, lng=lng)
+    await state.set_state(AdminAdd.phone)
+    await message.answer("3/5. Markaz telefoni (masalan <code>+998 90 123 45 67</code>):", reply_markup=main_menu())
+
+
+@router.message(AdminAdd.phone, F.contact | TEXT)
+async def admin_add_phone(message: Message, state: FSMContext):
+    phone = normalize_phone(message.contact.phone_number if message.contact else message.text)
+    if not phone:
+        return await message.answer("Raqam noto‘g‘ri. Masalan: +998 90 123 45 67")
+    await state.update_data(phone=phone)
+    await state.set_state(AdminAdd.subjects)
+    await message.answer(
+        "4/5. Fanlar (ixtiyoriy), vergul bilan: <i>Ingliz tili, Matematika</i>\n"
+        f"Ro‘yxat: {', '.join(SUBJECTS)}\n\nO‘tkazib yuborish: <b>-</b>"
+    )
+
+
+@router.message(AdminAdd.subjects, TEXT)
+async def admin_add_subjects(message: Message, state: FSMContext):
+    await state.update_data(subjects=parse_subjects(message.text, SUBJECTS))
+    await state.set_state(AdminAdd.price)
+    await message.answer("5/5. Oylik narx, so‘m (ixtiyoriy): <i>250000</i>\nO‘tkazib yuborish: <b>-</b>")
+
+
+@router.message(AdminAdd.price, TEXT)
+async def admin_add_price(message: Message, state: FSMContext):
+    t = message.text.strip()
+    price = 0
+    if t not in ("-", "—"):
+        price = parse_int(t, PRICE_MIN, PRICE_MAX)
+        if price is None:
+            return await message.answer(f"Narx {fmt_sum(PRICE_MIN)} – {fmt_sum(PRICE_MAX)} oralig‘ida bo‘lsin, yoki «-».")
+    d = await state.get_data()
+    await state.clear()
+    subjects = d.get("subjects") or ["Boshqa"]
+    doc = {
+        "name": d["name"],
+        "address": "Xaritada ko‘rsatilgan",
+        "lat": d["lat"],
+        "lng": d["lng"],
+        "phone": d["phone"],
+        "amenities": [],
+        "description": "",
+        "kind": "center",
+        # Kun/vaqt noma'lum, bo'sh joy 0 — egasi egallagach to'ldiradi
+        "groups": [{"subject": s, "days": [], "time": "", "price": price, "freeSeats": 0} for s in subjects],
+        "teachers": [],
+        "vip": False,
+        "rating": None,
+        "approved": True,
+        "status": "approved",
+        "tariff": None,
+        "ownerTgId": None,
+        "ownerUsername": None,
+        "claimed": False,
+        "source": "admin",
+        "addedBy": message.from_user.id,
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+        "lastReminderAt": None,
+    }
+    _, ref = await asyncio.to_thread(CENTERS.add, doc)
+    log.info("Admin %s markaz qo'shdi: %s (%s)", message.from_user.id, ref.id, d["name"])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [btn("🔑 Egasi uchun kod", "acc", ref.id), btn("📲 QR", "aqr", ref.id)],
+        [InlineKeyboardButton(text="➕ Yana qo‘shish", callback_data="aa:new")],
+    ])
+    await message.answer(
+        f"✅ <b>{escape(d['name'])}</b> xaritaga qo‘shildi (belgisi: «Ma’lumot tasdiqlanmagan»).\n"
+        f"📞 {d['phone']} · 📚 {escape(', '.join(subjects))}" + (f" · {fmt_sum(price)}" if price else "") + "\n"
+        f"ID: <code>{ref.id}</code>\n\n"
+        "Egasi ilovada «Bu mening markazim» ni bosishi yoki siz bergan kod bilan /claim qilishi mumkin.",
+        reply_markup=kb,
+    )
+
+
+async def notify_admins_ownerless_app(bot: Bot, cid: str, c: dict, data: dict):
+    user = f"\n💬 @{escape(str(data['tgUsername']))}" if data.get("tgUsername") else ""
+    text = (
+        "🔔 <b>Ariza egasi yo‘q markazga</b>\n\n"
+        f"🏫 {escape(clean_name(c.get('name')))}\n"
+        f"☎️ Markaz telefoni: <b>{escape(str(c.get('phone', '—')))}</b>\n\n"
+        f"📚 {escape(str(data.get('group', '')))}\n"
+        f"👤 {escape(str(data.get('name', '')))}\n"
+        f"📞 {escape(str(data.get('phone', '')))}{user}\n\n"
+        "Markazga qo‘ng‘iroq qilib arizani yetkazing va YaqinDars’ga ulanishni taklif qiling."
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[[btn("🔑 Egasi uchun kod", "acc", cid)]])
+    await notify_admins(bot, text, reply_markup=kb)
+
+
+# ---------------- Egallash (claim): kod va ilovadagi so'rov ----------------
+def attach_patch(center: dict, tg_id: int, username, via: str) -> dict:
+    return {
+        "ownerTgId": tg_id,
+        "ownerUsername": username,
+        "claimed": True,
+        "claimedAt": firestore.SERVER_TIMESTAMP,  # bepul 30 kun shundan hisoblanadi
+        "claimedVia": via,
+        "tariff": center.get("tariff") or "oddiy",
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    }
+
+
+def create_claim_code(cid: str, admin_id: int) -> str:
+    now = datetime.now(timezone.utc)
+    for _ in range(6):
+        code = make_claim_code()
+        try:
+            CLAIM_CODES.document(code).create({"centerId": cid, "createdBy": admin_id, "createdAt": now,
+                                               "expiresAt": now + CODE_TTL, "usedBy": None})
+            return code
+        except AlreadyExists:
+            continue
+    raise RuntimeError("Kod yaratib bo'lmadi")
+
+
+async def send_claim_code(message: Message, cid: str, admin_id: int):
+    center = await get_center(cid)
+    if not center:
+        return await message.answer("Markaz topilmadi.")
+    c = as_dict(center)
+    if is_claimed(c):
+        return await message.answer(f"«{escape(clean_name(c.get('name')))}» ning egasi allaqachon bor.")
+    code = await asyncio.to_thread(create_claim_code, cid, admin_id)
+    await message.answer(
+        f"🔑 <b>{escape(clean_name(c.get('name')))}</b> uchun kod: <code>{code}</code>\n"
+        f"7 kun, bir marta amal qiladi.\n\nEgasiga yuboring:\n"
+        f"«@{BOT_USERNAME} botiga <code>/claim {code}</code> deb yozing — markaz kabinetingizga ulanadi, 1 oy bepul.»"
+    )
+
+
+@router.message(Command("claimcode"))
+async def claimcode_cmd(message: Message, command: CommandObject):
+    if not is_admin(message.from_user.id):
+        return
+    cid = (command.args or "").strip()
+    if not cid or "/" in cid:
+        return await message.answer("Foydalanish: <code>/claimcode markazId</code> (ID markaz qo‘shilganda yoki admin panelda ko‘rinadi)")
+    await send_claim_code(message, cid, message.from_user.id)
+
+
+@router.callback_query(F.data.startswith("acc:"))
+async def claimcode_btn(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return await call.answer()
+    await call.answer()
+    await send_claim_code(call.message, call.data.split(":", 1)[1], call.from_user.id)
+
+
+@firestore.transactional
+def _claim_code_txn(transaction, code_ref, tg_id: int, username):
+    code_snap = code_ref.get(transaction=transaction)
+    code = code_snap.to_dict() if code_snap.exists else None
+    center_ref = CENTERS.document(str(code["centerId"])) if code and code.get("centerId") else None
+    center_snap = center_ref.get(transaction=transaction) if center_ref else None
+    center = center_snap.to_dict() if center_snap is not None and center_snap.exists else None
+    err = claim_code_error(code, center, datetime.now(timezone.utc))
+    if err:
+        return err, None
+    transaction.update(center_ref, attach_patch(center, tg_id, username, "code"))
+    transaction.update(code_ref, {"usedBy": tg_id, "usedAt": firestore.SERVER_TIMESTAMP})
+    return None, (center_ref.id, center)
+
+
+@router.message(Command("claim"))
+async def claim_cmd(message: Message, command: CommandObject, bot: Bot):
+    code = normalize_code(command.args or "")
+    if not code:
+        return await message.answer("Kodni yozing, masalan: <code>/claim ABC123</code>\nKodni admin beradi: @" + ADMIN_TG)
+    user = message.from_user
+    err, res = await asyncio.to_thread(lambda: _claim_code_txn(db.transaction(), CLAIM_CODES.document(code), user.id, user.username))
+    if err:
+        return await message.answer(f"⚠️ {err}")
+    cid, c = res
+    name = escape(clean_name(c.get("name")))
+    await message.answer(
+        f"✅ <b>{name}</b> endi sizniki!\n🎁 30 kun bepul. Bo‘sh joylar, guruhlar va arizalarni kabinetda boshqaring.\n"
+        "Markaz QR kodi: /qr",
+        reply_markup=owner_kb(),
+    )
+    await notify_admins(bot, f"🔑 <b>{name}</b> kod orqali egallandi: {escape(user.full_name)}" + (f" (@{user.username})" if user.username else "") + f"\nID: <code>{cid}</code>")
+
+
+async def process_claim_request(bot: Bot, ref):
+    req = await claim_if(ref, lambda d: d.get("status") == "pending" and not d.get("notified"), {"notified": True})
+    if not req:
+        return
+    center = await get_center(str(req.get("centerId", "")))
+    c = as_dict(center) if center else {}
+    who = escape(str(req.get("name") or "")) + (f" @{escape(str(req['username']))}" if req.get("username") else "") + f" (<code>{req.get('tgId')}</code>)"
+    text = (
+        "🙋 <b>«Bu mening markazim» so‘rovi</b>\n\n"
+        f"🏫 {escape(clean_name(c.get('name') or req.get('centerName')))}\n"
+        f"☎️ Markaz telefoni: <b>{escape(str(c.get('phone', '—')))}</b>\n"
+        f"👤 {who}\n\n"
+        "Tasdiqlashdan oldin markaz telefoniga qo‘ng‘iroq qilib, egasi ekanini aniqlang."
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"cr:ok:{ref.id}", style="success"),
+        InlineKeyboardButton(text="❌ Rad etish", callback_data=f"cr:no:{ref.id}", style="danger"),
+    ]])
+    await notify_admins(bot, text, reply_markup=kb)
+
+
+@firestore.transactional
+def _claim_req_txn(transaction, req_ref, approve: bool):
+    req_snap = req_ref.get(transaction=transaction)
+    req = req_snap.to_dict() if req_snap.exists else None
+    if not req or req.get("status") != "pending":
+        return "So‘rov allaqachon ko‘rib chiqilgan.", None
+    center_ref = CENTERS.document(str(req.get("centerId")))
+    center_snap = center_ref.get(transaction=transaction)
+    center = center_snap.to_dict() if center_snap.exists else None
+    if approve:
+        if not center:
+            return "Markaz topilmadi.", None
+        if is_claimed(center):
+            transaction.update(req_ref, {"status": "rejected", "decidedAt": firestore.SERVER_TIMESTAMP})
+            return "Bu markazning egasi allaqachon bor — so‘rov rad etildi.", None
+        transaction.update(center_ref, attach_patch(center, int(req["tgId"]), req.get("username"), "request"))
+    transaction.update(req_ref, {"status": "approved" if approve else "rejected", "decidedAt": firestore.SERVER_TIMESTAMP})
+    return None, (req, center or {})
+
+
+@router.callback_query(F.data.startswith("cr:"))
+async def claim_request_decide(call: CallbackQuery, bot: Bot):
+    if not is_admin(call.from_user.id):
+        return await call.answer()
+    _, action, rid = call.data.split(":", 2)
+    approve = action == "ok"
+    err, res = await asyncio.to_thread(lambda: _claim_req_txn(db.transaction(), CLAIM_REQS.document(rid), approve))
+    if err:
+        await call.answer(err, show_alert=True)
+        try:
+            await call.message.edit_reply_markup(reply_markup=None)
+        except TelegramBadRequest:
+            pass
+        return
+    req, c = res
+    name = escape(clean_name(c.get("name") or req.get("centerName")))
+    try:
+        await call.message.edit_text(call.message.html_text + ("\n\n<b>✅ Tasdiqlandi</b>" if approve else "\n\n<b>❌ Rad etildi</b>"))
+    except (TelegramBadRequest, AttributeError):
+        pass
+    await call.answer("Tasdiqlandi" if approve else "Rad etildi")
+    tg_id = req.get("tgId")
+    if approve:
+        try:
+            await bot.send_message(tg_id, f"✅ <b>{name}</b> sizga biriktirildi!\n🎁 30 kun bepul. Ma’lumotlarni kabinetda yangilang — "
+                                          "«Ma’lumot tasdiqlanmagan» belgisi o‘rniga markazingiz to‘liq ko‘rinadi.\nQR kod: /qr",
+                                   reply_markup=owner_kb())
+        except Exception as e:  # noqa: BLE001
+            log.info("Egaga yuborilmadi (%s): %s", tg_id, e)
+    else:
+        await notify_user(bot, tg_id, f"«{name}» bo‘yicha so‘rovingiz tasdiqlanmadi. Savol bo‘lsa: @{ADMIN_TG}", open_app=False)
+
+
+def start_claim_watcher(bot: Bot, loop: asyncio.AbstractEventLoop):
+    def on_snapshot(_docs, changes, _read_time):
+        for ch in changes:
+            if ch.type.name == "ADDED":
+                asyncio.run_coroutine_threadsafe(process_claim_request(bot, ch.document.reference), loop)
+
+    return CLAIM_REQS.where(filter=FieldFilter("status", "==", "pending")).on_snapshot(on_snapshot)
+
+
+# ---------------- QR va havolalar ----------------
+async def send_center_qr(bot: Bot, chat_id: int, cid: str, c: dict):
+    name = clean_name(c.get("name"))
+    link = center_link(cid)
+    png = await asyncio.to_thread(make_poster, name, link, BOT_USERNAME)
+    await bot.send_document(
+        chat_id,
+        BufferedInputFile(png, filename=f"yaqindars-qr-{cid[:8]}.png"),
+        caption=(
+            f"📲 <b>{escape(name)}</b> — QR kod (1200×1500, chop etishga tayyor)\n\n"
+            f"🔗 {link}\n\n"
+            "Eshikka, e’lonlarga, Instagram’ga joylang: skanerlagan ota-ona to‘g‘ridan-to‘g‘ri markazingiz sahifasiga tushadi."
+        ),
+    )
+
+
+@router.message(Command("qr"))
+async def qr_cmd(message: Message, bot: Bot):
+    centers = await owner_centers(message.from_user.id)
+    if not centers:
+        return await message.answer("Sizda hali markaz yo‘q. Qo‘shish: /markaz")
+    for snap in centers[:5]:
+        await send_center_qr(bot, message.chat.id, snap.id, as_dict(snap))
+
+
+@router.callback_query(F.data.startswith("aqr:"))
+async def admin_qr_btn(call: CallbackQuery, bot: Bot):
+    if not is_admin(call.from_user.id):
+        return await call.answer()
+    await call.answer()
+    center = await get_center(call.data.split(":", 1)[1])
+    if center:
+        await send_center_qr(bot, call.message.chat.id, center.id, as_dict(center))
+
+
+@router.message(Command("link"))
+async def link_cmd(message: Message, command: CommandObject, bot: Bot):
+    if not is_admin(message.from_user.id):
+        return
+    slug = campaign_slug(command.args or "")
+    if not slug:
+        lines = "\n".join(f"• <code>/link {k}</code>" for k in CAMPAIGNS)
+        return await message.answer(
+            "🔗 <b>Kampaniya havolalari</b> — kim qayerdan kelganini admin paneldagi «Manbalar» jadvali ko‘rsatadi.\n\n"
+            f"{lines}\n\nO‘zingiznikini ham yozish mumkin (lotin harflari, raqam, _): <code>/link bozor_banner</code>"
+        )
+    link = campaign_link(slug)
+    png = await asyncio.to_thread(make_poster, "Rishtondagi o‘quv markazlari va repetitorlar", link, BOT_USERNAME,
+                                  "Bo‘sh joylar · narxlar · bepul sinov darsi")
+    await bot.send_document(message.chat.id, BufferedInputFile(png, filename=f"yaqindars-{slug}.png"),
+                            caption=f"🔗 <b>{slug}</b> kampaniyasi:\n{link}\n\nPoster — chop etish uchun.")
+
+
+async def process_bot_request(bot: Bot, ref):
+    req = await claim_if(ref, lambda d: d.get("status") == "pending", {"status": "processing"})
+    if not req:
+        return
+    status = "done"
+    try:
+        if req.get("type") == "qr":
+            center = await get_center(str(req.get("centerId", "")))
+            c = as_dict(center) if center else {}
+            if not center or c.get("ownerTgId") != req.get("tgId"):
+                status = "error"
+            else:
+                await send_center_qr(bot, req["tgId"], center.id, c)
+        else:
+            status = "error"
+    except Exception:  # noqa: BLE001
+        log.exception("Bot so'rovi %s xatosi", ref.id)
+        status = "error"
+    await asyncio.to_thread(ref.update, {"status": status, "doneAt": firestore.SERVER_TIMESTAMP})
+
+
+def start_botreq_watcher(bot: Bot, loop: asyncio.AbstractEventLoop):
+    def on_snapshot(_docs, changes, _read_time):
+        for ch in changes:
+            if ch.type.name == "ADDED":
+                asyncio.run_coroutine_threadsafe(process_bot_request(bot, ch.document.reference), loop)
+
+    return BOT_REQS.where(filter=FieldFilter("status", "==", "pending")).on_snapshot(on_snapshot)
+
+
+# ---------------- Haftalik hisobot (dushanba 09:00) ----------------
+def center_week_stats(cid: str, now: datetime) -> tuple[dict, dict]:
+    cur_d, prev_d = week_dates(now), week_dates(now, 1)
+    refs = [CENTER_STATS.document(f"{cid}_{d}") for d in cur_d + prev_d]
+    got = {s.id: (s.to_dict() or {}) for s in db.get_all(refs) if s.exists}
+    cur = sum_stats([got[f"{cid}_{d}"] for d in cur_d if f"{cid}_{d}" in got])
+    prev = sum_stats([got[f"{cid}_{d}"] for d in prev_d if f"{cid}_{d}" in got])
+    return cur, prev
+
+
+def weekly_report_text(c: dict, cur: dict, prev: dict, now: datetime) -> str:
+    days = week_dates(now)
+    period = f"{days[0][8:]}.{days[0][5:7]} – {days[-1][8:]}.{days[-1][5:7]}"
+    rows = [("👁", "Ko‘rishlar", "views"), ("📞", "Qo‘ng‘iroq bosildi", "calls"), ("🧭", "Yo‘l bosildi", "routes"),
+            ("📝", "Arizalar", "apps"), ("✅", "Qabul qilingan", "accepted")]
+    lines = [f"{e} {label}: <b>{cur[k]}</b> <i>({fmt_change(cur[k], prev[k])})</i>" for e, label, k in rows]
+    return (f"📊 <b>Haftalik hisobot</b> · {escape(clean_name(c.get('name')))}\n{period}\n\n" + "\n".join(lines)
+            + f"\n\n💡 {weekly_tip(cur, c, now)}")
+
+
+async def job_weekly_report(bot: Bot):
+    now = datetime.now(timezone.utc)
+    snaps = await asyncio.to_thread(lambda: list(CENTERS.where(filter=FieldFilter("approved", "==", True)).stream()))
+    sent = 0
+    for snap in snaps:
+        c = as_dict(snap)
+        if not c.get("ownerTgId") or c.get("hidden"):
+            continue
+        try:
+            cur, prev = await asyncio.to_thread(center_week_stats, snap.id, now)
+            await bot.send_message(c["ownerTgId"], weekly_report_text(c, cur, prev, now), reply_markup=owner_kb())
+            sent += 1
+        except Exception as e:  # noqa: BLE001
+            log.info("Haftalik hisobot yuborilmadi (%s): %s", snap.id, e)
+        await asyncio.sleep(0.05)
+    log.info("Haftalik hisobot: %s ta markazga yuborildi", sent)
+
+
+# ---------------- To'lov eslatmalari va muddati o'tganlarni yashirish (har kuni 10:00) ----------------
+async def job_billing(bot: Bot):
+    now = datetime.now(timezone.utc)
+    snaps = await asyncio.to_thread(lambda: list(CENTERS.where(filter=FieldFilter("approved", "==", True)).stream()))
+    for snap in snaps:
+        c = as_dict(snap)
+        act = billing_action(c, now)
+        if not act:
+            continue
+        kind, n = act
+        name = escape(clean_name(c.get("name")))
+        owner = c.get("ownerTgId")
+        pay_kb = InlineKeyboardMarkup(inline_keyboard=[[ibtn("💳 To‘lash — admin orqali", pay_url(c, snap.id), "success")]])
+        try:
+            if kind == "remind":
+                await asyncio.to_thread(snap.reference.update, {"billingReminded": remind_key(c, n)})
+                when = "ertaga" if n == 1 else f"{n} kundan keyin"
+                await bot.send_message(owner, f"⏰ <b>{name}</b>: obuna muddati {when} tugaydi.\n"
+                                              "Xaritada qolish uchun to‘lovni admin orqali qiling.", reply_markup=pay_kb)
+            elif kind == "hide":
+                await asyncio.to_thread(snap.reference.update, {"hidden": True, "hiddenAt": firestore.SERVER_TIMESTAMP})
+                await bot.send_message(owner, f"⚠️ <b>{name}</b> to‘lov muddati {n} kun oldin tugagani uchun xaritadan vaqtincha yashirildi.\n"
+                                              "Ma’lumotlaringiz o‘chirilmagan — to‘lovdan keyin darhol qaytadi.", reply_markup=pay_kb)
+                await notify_admins(bot, f"🙈 <b>{name}</b> xaritadan yashirildi: to‘lov {n} kun kechikdi.\nID: <code>{snap.id}</code>")
+            elif kind == "unhide":
+                await asyncio.to_thread(snap.reference.update, {"hidden": False})
+                await bot.send_message(owner, f"✅ <b>{name}</b> yana xaritada ko‘rinmoqda. Rahmat!")
+        except Exception as e:  # noqa: BLE001
+            log.info("To'lov eslatmasi (%s, %s): %s", snap.id, kind, e)
+
+
 # ---------------- Adminlarga xabar ----------------
 async def notify_admins(bot: Bot, text: str, **kw):
     for admin in ADMIN_IDS:
@@ -1832,6 +2372,8 @@ async def job_backup(bot: Bot):
 # (nom, tekshiruvchi) — tekshiruvchi(now, oxirgi_sana) -> bool
 SCHEDULED_JOBS = [
     ("backup", lambda now, last: due_daily(now, 3, 0, last), job_backup),
+    ("billing", lambda now, last: due_daily(now, 10, 0, last), job_billing),
+    ("weeklyReport", lambda now, last: due_weekly(now, 0, 9, 0, last), job_weekly_report),
 ]
 
 
@@ -1917,6 +2459,7 @@ async def main():
         BotCommand(command="start", description="Bosh menyu"),
         BotCommand(command="markaz", description="Markazni qo‘shish / boshqarish"),
         BotCommand(command="help", description="Yordam"),
+        BotCommand(command="qr", description="Markazim QR kodi"),
         BotCommand(command="delete", description="Ma’lumotlarimni o‘chirish"),
         BotCommand(command="cancel", description="Bekor qilish"),
     ]
@@ -1927,6 +2470,8 @@ async def main():
         BotCommand(command="stat", description="Statistika"),
         BotCommand(command="logs", description="Oxirgi xatolar"),
         BotCommand(command="backup", description="Zaxira nusxa olish"),
+        BotCommand(command="claimcode", description="Markaz egasi uchun kod"),
+        BotCommand(command="link", description="Kampaniya havolasi (flyer, maktab…)"),
     ]
     for admin in ADMIN_IDS:
         try:
@@ -1935,6 +2480,8 @@ async def main():
             log.info("Admin %s menyusi o'rnatilmadi: %s", admin, e)
 
     me = await bot.get_me()
+    global BOT_USERNAME
+    BOT_USERNAME = me.username or BOT_USERNAME
     # Web app «Ulashish» va «Markaz qo‘shish» havolalari uchun bot username'i (ochiq ma'lumot)
     # Ochiq sozlamalar: bot username (ulashish havolalari) va AI yoqilganmi
     await asyncio.to_thread(
@@ -1952,6 +2499,8 @@ async def main():
         "bo'sh joylar": lambda: start_seats_watcher(bot, loop),
         "ma'lumot o'chirish": lambda: start_delete_watcher(bot, loop),
         "markaz tasdiqlash": lambda: start_approval_watcher(bot, loop),
+        "egallash so'rovlari": lambda: start_claim_watcher(bot, loop),
+        "bot so'rovlari (QR)": lambda: start_botreq_watcher(bot, loop),
     }
     if GROQ_API_KEY:
         factories["AI"] = lambda: start_ai_watcher(loop)

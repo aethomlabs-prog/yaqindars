@@ -329,6 +329,29 @@ Har push’da Railway/Render botni o‘zi qayta joylaydi. Xatolar loglarda va Fi
 
 ---
 
+## Markazlar: tez qo‘shish, egallash, QR, hisobot, to‘lov
+
+- **Tez qo‘shish (admin).** Botda `/admin` → «➕ Markaz qo‘shish» (nomi → joylashuv pin → telefon → fanlar → narx)
+  yoki admin panelda «Markaz qo‘shish». Markaz `source: "admin"`, `claimed: false` bilan saqlanadi va xaritada
+  «Ma’lumot tasdiqlanmagan» belgisi bilan chiqadi. Bunday markazga ariza kelsa, bot uni markaz telefoni bilan **adminga** yuboradi.
+- **Egallash.** Markaz sahifasida «Bu mening markazim» → adminga so‘rov (✅/❌) → tasdiqlansa `ownerTgId` biriktiriladi,
+  `claimed: true`, 30 kun bepul (`claimedAt` dan). Yoki admin `/claimcode <markazId>` → 6 belgili kod (7 kun, bir martalik) →
+  egasi botga `/claim KOD`.
+- **QR.** Markaz havolasi: `https://t.me/yaqindars_bot?startapp=c_<markazId>`. Kabinet → «Mening QR’im» → bot
+  1200×1500 PNG poster yuboradi (brend rangi `#0F3D7A`, markaz nomi, @yaqindars_bot); botda `/qr` ham ishlaydi.
+  Kampaniya havolalari: admin `/link flyer` (maktab, stiker, instagram, youtube yoki o‘zingiznikini) — havola + poster.
+  Arizalarda `source` maydoni (`src_flyer`, `c_<id>`) saqlanadi.
+- **Haftalik hisobot** — har dushanba 09:00 egaga: ko‘rishlar, qo‘ng‘iroq va yo‘l bosilishi, arizalar, qabul qilinganlar,
+  o‘tgan haftaga nisbatan o‘zgarish va bitta maslahat. Hodisalar `centerStats/<markazId>_<sana>` kunlik hisoblagichlarida.
+- **To‘lov eslatmasi** — har kuni 10:00: muddat tugashiga 3 va 1 kun qolganda egaga «To‘lash — admin orqali» tugmasi bilan.
+  7 kundan ortiq kechiksa — markaz xaritadan **yashiriladi** (`hidden: true`, ma’lumot o‘chmaydi), egaga va adminga xabar.
+  Admin panelda «To‘lov +1 oy» bosilsa darhol qaytadi.
+
+> Yangi kolleksiyalar (`claimRequests`, `claimCodes`, `botRequests`, `centerStats`) uchun qoidalar `firestore.rules` da —
+> Console → Firestore → **Rules** ga qayta joylang (Publish).
+
+---
+
 ## Firestore indekslari (`firestore.indexes.json`)
 
 Ilova va botdagi **barcha** so‘rovlar bitta maydonli (tenglik, bitta diapazon yoki bitta `orderBy`) — ular uchun
@@ -378,3 +401,8 @@ Har relizdan oldin **ikkala** telefonda o‘ting. Muammo bo‘lsa, ilovani `?deb
 | 15 | Qorong‘i mavzu (Telegram sozlamasi) | Matnlar o‘qiladi, banner ranglari o‘zgarmaydi | ☐ | ☐ |
 | 16 | Admin: botga `/backup` | 2–10 s ichida `yaqindars_….zip` fayli va kolleksiyalar soni | ☐ | ☐ |
 | 17 | `https://<railway-manzil>/health` (brauzerda) | `ok` | ☐ | ☐ |
+| 18 | Admin: `/admin` → «➕ Markaz qo‘shish» → 5 qadam | Xaritada markaz «Tasdiqlanmagan» belgisi bilan | ☐ | ☐ |
+| 19 | Egasiz markaz → «Bu mening markazim» | Adminga ✅/❌ so‘rov; ✅ → egaga «sizga biriktirildi» + kabinet | ☐ | ☐ |
+| 20 | Admin `/claimcode <ID>` → boshqa akkauntdan `/claim KOD` | «endi sizniki», kabinetda markaz va «Bepul sinov oyi» | ☐ | ☐ |
+| 21 | Kabinet → «Mening QR’im» → «QR posterni olish» | Botda PNG poster; telefon kamerasi bilan skanerlansa markaz sahifasi ochiladi | ☐ | ☐ |
+| 22 | Admin `/link flyer` → havolani boshqa telefonda oching → ariza yuboring | Ilova ochiladi; arizada manba `src_flyer` (admin panel → Manbalar) | ☐ | ☐ |

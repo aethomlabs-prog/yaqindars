@@ -29,7 +29,8 @@ import {
   type Firestore
 } from "firebase/firestore";
 import { FIREBASE_CONFIG } from "../../config";
-import type { AdminApi, AdminCenter, ApplyInput, Backend, OwnerApi, OwnerCenter, ProfileDoc } from "./backend";
+import type { AdminApi, AdminCenter, ApplyInput, Backend, CenterEvent, OwnerApi, OwnerCenter, ProfileDoc } from "./backend";
+import { appSource, tashkentDate } from "./source";
 import { centerChatId } from "./backend";
 import { billingOf, extendUntil } from "./billing";
 import { ruleBasedReply } from "./match";
@@ -73,7 +74,8 @@ function toCenter(id: string, d: DocumentData): Center {
       experience: num(t.experience),
       about: str(t.about, 120)
     })),
-    updatedMs: ms(d.updatedAt)
+    updatedMs: ms(d.updatedAt),
+    claimed: d.claimed !== false
   };
 }
 
@@ -168,8 +170,13 @@ function getDb() {
 }
 
 const centersQuery = (db: Firestore) => query(collection(db, "centers"), where("approved", "==", true));
+// hidden — to‘lov 7+ kun kechikkan (ma’lumot o‘chirilmaydi, faqat xaritada ko‘rinmaydi)
 const toCenters = (docs: { id: string; data: () => DocumentData }[]) =>
-  docs.map((d) => toCenter(d.id, d.data())).filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+  docs
+    .map((d) => [d.data(), d.id] as const)
+    .filter(([x]) => x.hidden !== true)
+    .map(([x, id]) => toCenter(id, x))
+    .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
 
 /** Markazlar: avval telefondagi keshdan (bir zumda), keyin serverdan. Telegram tasdiqlashini kutmaydi. */
 export async function prefetchCenters(cb: (centers: Center[], fromCache: boolean) => void): Promise<void> {
@@ -223,7 +230,9 @@ export async function createFirebaseBackend(): Promise<Backend> {
                     approved: x.approved === true,
                     tariff: x.tariff === "vip" || x.tariff === "oddiy" ? x.tariff : null,
                     createdMs: ms(x.createdAt),
-                    paidUntilMs: ms(x.paidUntil) || null
+                    paidUntilMs: ms(x.paidUntil) || null,
+                    claimedMs: ms(x.claimedAt) || null,
+                    hidden: x.hidden === true
                   };
                 })
               ),
@@ -250,6 +259,9 @@ export async function createFirebaseBackend(): Promise<Backend> {
             statusBy: "web",
             trialAt: trialMs ? Timestamp.fromMillis(trialMs) : null
           });
+        },
+        async requestQr(centerId) {
+          await addDoc(collection(db, "botRequests"), { type: "qr", centerId, tgId, status: "pending", createdAt: serverTimestamp() });
         }
       }
     : undefined;
@@ -268,7 +280,9 @@ export async function createFirebaseBackend(): Promise<Backend> {
               ownerTgId: typeof x.ownerTgId === "number" ? x.ownerTgId : null,
               ownerUsername: typeof x.ownerUsername === "string" ? x.ownerUsername : null,
               createdMs: ms(x.createdAt),
-              paidUntilMs: ms(x.paidUntil) || null
+              paidUntilMs: ms(x.paidUntil) || null,
+              claimedMs: ms(x.claimedAt) || null,
+              hidden: x.hidden === true
             };
           });
         },
@@ -297,8 +311,37 @@ export async function createFirebaseBackend(): Promise<Backend> {
         },
         async markPaid(c, months) {
           const until = extendUntil(billingOf(c), months);
-          await updateDoc(doc(db, "centers", c.id), { paidUntil: Timestamp.fromMillis(until), updatedAt: serverTimestamp() });
+          // To‘lov qabul qilindi — yashirilgan bo‘lsa darhol xaritaga qaytadi
+          await updateDoc(doc(db, "centers", c.id), { paidUntil: Timestamp.fromMillis(until), updatedAt: serverTimestamp(), ...(c.hidden ? { hidden: false } : {}) });
           return until;
+        },
+        async addCenter(input) {
+          const ref = await addDoc(collection(db, "centers"), {
+            name: input.name.slice(0, 100),
+            address: "Xaritada ko‘rsatilgan",
+            lat: input.lat,
+            lng: input.lng,
+            phone: input.phone,
+            amenities: [],
+            description: "",
+            kind: "center",
+            groups: (input.subjects.length ? input.subjects : ["Boshqa"]).slice(0, 10).map((subject) => ({ subject, days: [], time: "", price: input.price, freeSeats: 0 })),
+            teachers: [],
+            vip: false,
+            rating: null,
+            approved: true,
+            status: "approved",
+            tariff: null,
+            ownerTgId: null,
+            ownerUsername: null,
+            claimed: false,
+            source: "admin",
+            addedBy: tgId,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            lastReminderAt: null
+          });
+          return ref.id;
         },
         async setCenter(c, patch) {
           await updateDoc(doc(db, "centers", c.id), {
@@ -343,6 +386,7 @@ export async function createFirebaseBackend(): Promise<Backend> {
         comment: input.comment.slice(0, 300),
         tgUserId: tgId,
         tgUsername: tgUser?.username ?? null,
+        source: appSource(),
         createdAt: serverTimestamp(),
         notified: false,
         status: "new"
@@ -362,6 +406,36 @@ export async function createFirebaseBackend(): Promise<Backend> {
     async joinWaitlist(centerId, groupIndex) {
       need();
       await addDoc(collection(db, "waitlist"), { centerId, groupIndex, userTgId: tgId, createdAt: serverTimestamp(), notified: false });
+    },
+    async requestClaim(center) {
+      const u = need();
+      const ref = doc(db, "claimRequests", `${u}_${center.id}`);
+      // Allaqachon yuborilgan (kutilmoqda / tasdiqlangan) — qayta yubormaymiz
+      const prev = await getDoc(ref).catch(() => null);
+      if (prev?.exists() && prev.data()?.status !== "rejected") return;
+      await setDoc(ref, {
+        centerId: center.id,
+        centerName: center.name.slice(0, 100),
+        tgId,
+        name: (tgUser?.first_name || "").slice(0, 60),
+        username: tgUser?.username ?? null,
+        status: "pending",
+        createdAt: serverTimestamp()
+      });
+    },
+    track(centerId: string, ev: CenterEvent) {
+      // Ko‘rish — sessiyada bir marta (yangilash/qaytish hisobni shishirmasin)
+      const key = `yd-ev-${ev}-${centerId}`;
+      try {
+        if (ev === "views") {
+          if (sessionStorage.getItem(key)) return;
+          sessionStorage.setItem(key, "1");
+        }
+      } catch {
+        /* xususiy rejim */
+      }
+      const date = tashkentDate();
+      setDoc(doc(db, "centerStats", `${centerId}_${date}`), { centerId, date, [ev]: increment(1) }, { merge: true }).catch(() => {});
     },
 
     async loadProfile() {

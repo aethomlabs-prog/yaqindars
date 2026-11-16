@@ -7,6 +7,7 @@ import { OfflineBanner } from "../components/OfflineBanner";
 import { DEBUG, DebugPanel } from "../components/DebugPanel";
 import { NetworkModal } from "../components/NetworkModal";
 import { applyChromeColors, onThemeChanged, startParam, telegramColorScheme, useBackHandler } from "../lib/telegram";
+import { appSource } from "../lib/source";
 import { useApp, useProfile, useSettings } from "../store/app";
 import { useNav, type Route, type StackEntry, type Tab } from "../store/nav";
 import { HomeScreen } from "../screens/home/HomeScreen";
@@ -272,7 +273,10 @@ function MainApp() {
     setVisited((v) => (v.has(tab) ? v : new Set(v).add(tab)));
   }, [tab]);
 
-  // Deep link: t.me/BOT?startapp=c_<markazId>
+  // Deep link: t.me/BOT?startapp=c_<markazId> | src_<kanal>; birinchi manba qurilmada eslab qolinadi
+  useEffect(() => {
+    appSource();
+  }, []);
   useEffect(() => {
     if (centersReady && startParam?.startsWith("c_")) push({ name: "center", centerId: startParam.slice(2) }, "home");
   }, [centersReady, push]);

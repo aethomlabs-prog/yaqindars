@@ -50,7 +50,11 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     files = sorted(args.files, key=lambda f: (len(f), f)) if any(".part" in f for f in args.files) else args.files
-    data = b"".join(open(f, "rb").read() for f in files)
+    chunks = []
+    for f in files:
+        with open(f, "rb") as fh:
+            chunks.append(fh.read())
+    data = b"".join(chunks)
     manifest, cols = read_backup_zip(data)
     if args.only:
         unknown = set(args.only) - set(cols)

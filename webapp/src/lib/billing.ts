@@ -17,12 +17,13 @@ export interface Billing {
 }
 
 export function billingOf(
-  c: { approved: boolean; vip: boolean; tariff: "oddiy" | "vip" | null; createdMs: number; paidUntilMs: number | null },
+  c: { approved: boolean; vip: boolean; tariff: "oddiy" | "vip" | null; createdMs: number; paidUntilMs: number | null; claimedMs?: number | null },
   now = Date.now()
 ): Billing {
   const tariff = c.vip || c.tariff === "vip" ? "vip" : "oddiy";
   const price = TARIFF_PRICE[tariff];
-  const trialEnd = (c.createdMs || now) + TRIAL_DAYS * DAY;
+  // Admin qo‘shgan markaz: bepul oy egasi egallagan kundan boshlanadi
+  const trialEnd = (c.claimedMs || c.createdMs || now) + TRIAL_DAYS * DAY;
   const until = Math.max(trialEnd, c.paidUntilMs ?? 0);
   const days = Math.max(0, Math.ceil(Math.abs(until - now) / DAY));
   if (!c.approved) return { state: "pending", tariff, price, until: trialEnd, days: TRIAL_DAYS };

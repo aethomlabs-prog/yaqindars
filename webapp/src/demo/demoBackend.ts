@@ -114,7 +114,7 @@ export function createDemoBackend(): Backend {
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const adminCenters: AdminCenter[] = [
-    ...DEMO_CENTERS.map((c, i) => ({ ...structuredClone(c), approved: true, tariff: (c.vip ? "vip" : "oddiy") as "vip" | "oddiy", ownerTgId: 100000 + i, ownerUsername: `markaz_${i + 1}`,
+    ...DEMO_CENTERS.map((c, i) => ({ ...structuredClone(c), approved: true, tariff: (c.vip ? "vip" : "oddiy") as "vip" | "oddiy", ownerTgId: c.claimed ? 100000 + i : null, ownerUsername: c.claimed ? `markaz_${i + 1}` : null,
       createdMs: Date.now() - (i % 3 === 0 ? 10 : 45 + i) * DAYMS,
       // namuna: ba'zilari to‘lagan, ba'zilarining muddati o‘tgan
       paidUntilMs: i % 3 === 0 ? null : i % 3 === 1 ? Date.now() + (5 + i) * DAYMS : Date.now() - (2 + i) * DAYMS })),
@@ -171,6 +171,16 @@ export function createDemoBackend(): Backend {
       if (x) x.paidUntilMs = until;
       return until;
     },
+    async addCenter(input) {
+      const id = `quick${adminCenters.length}`;
+      adminCenters.unshift({
+        id, name: input.name, address: "Xaritada ko‘rsatilgan", lat: input.lat, lng: input.lng, phone: input.phone, amenities: [], vip: false,
+        rating: null, reviewsCount: 0, description: "", ageFrom: null, ageTo: null, photoUrl: null, kind: "center", teachers: [], claimed: false,
+        groups: (input.subjects.length ? input.subjects : ["Boshqa"]).map((subject) => ({ subject, days: [], time: "", price: input.price, freeSeats: 0 })),
+        updatedMs: Date.now(), approved: true, tariff: null, ownerTgId: null, ownerUsername: null, createdMs: Date.now(), paidUntilMs: null
+      });
+      return id;
+    },
     async setCenter(c, patch) {
       const x = adminCenters.find((y) => y.id === c.id);
       if (!x) return;
@@ -194,8 +204,15 @@ export function createDemoBackend(): Backend {
         const a = ownerApps.find((x) => x.id === app.id);
         if (a) Object.assign(a, { status, trialMs });
         ownerEmit();
+      },
+      async requestQr() {
+        await new Promise((r) => setTimeout(r, 400));
       }
     },
+    async requestClaim() {
+      await new Promise((r) => setTimeout(r, 400));
+    },
+    track() {},
     authed: true,
     centerChatEnabled: true,
     aiEnabled: false,

@@ -5,7 +5,7 @@ import { Fragment, useState } from "react";
 import { Bubble, Composer, DaySeparator, newDay, TypingDots, useStickToBottom } from "../../components/chat";
 import { SubjectIcon } from "../../components/brand";
 import { NavIconButton, Page } from "../../components/ios/Page";
-import { fmtSum } from "../../lib/format";
+import { fmtPriceFrom } from "../../lib/format";
 import { distanceKm, formatDistance } from "../../lib/geo";
 import { newId, useApp, useOrigin, useProfile } from "../../store/app";
 import { useNav } from "../../store/nav";
@@ -25,7 +25,7 @@ function CenterCard({ id }: { id: string }) {
       <span className="min-w-0 flex-1">
         <span className="block truncate text-headline">{c.name}</span>
         <span className="tnum block truncate text-footnote text-ink2">
-          {formatDistance(distanceKm(pos, c))} · {fmtSum(Math.min(...c.groups.map((g) => g.price)))} dan
+          {formatDistance(distanceKm(pos, c))} · {fmtPriceFrom(c.groups.length ? Math.min(...c.groups.map((g) => g.price)) : 0)}
         </span>
       </span>
       <SeatChip count={free} />
