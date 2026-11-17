@@ -414,11 +414,68 @@ def welcome_kb() -> InlineKeyboardMarkup:
     ])
 
 
-@router.message(CommandStart())
-async def start(message: Message, state: FSMContext, command: CommandObject):
-    await state.clear()
-    if (command.args or "").strip() == "markaz":  # t.me/BOT?start=markaz (ilovadagi «Markazingizni qo‘shing»)
-        return await markaz(message, state)
+# ---------------- Kanalga majburiy obuna (t.me/yaqindars) ----------------
+# Bot kanalda ADMIN bo'lishi shart (a'zolikni tekshirish uchun). Tekshirib bo'lmasa — hech kimni bloklamaymiz.
+REQUIRED_CHANNEL = os.getenv("REQUIRED_CHANNEL", "yaqindars").strip().lstrip("@")
+SUB_OK_STATUSES = {"member", "administrator", "creator"}
+_sub_cache: dict[int, float] = {}  # tasdiqlangan obunachilar: user_id -> vaqt (10 daqiqa eslab qolamiz)
+_sub_warned = False
+
+
+async def is_subscribed(bot: Bot, user_id: int) -> bool:
+    global _sub_warned
+    if not REQUIRED_CHANNEL or is_admin(user_id):
+        return True
+    if time.time() - _sub_cache.get(user_id, 0) < 600:
+        return True
+    try:
+        m = await bot.get_chat_member(f"@{REQUIRED_CHANNEL}", user_id)
+    except Exception as e:  # noqa: BLE001 — bot kanalda admin emas / kanal topilmadi
+        if not _sub_warned:
+            log.warning("Obunani tekshirib bo'lmadi (@%s): %s — botni kanalga ADMIN qiling. Hozircha tekshiruvsiz.", REQUIRED_CHANNEL, e)
+            _sub_warned = True
+        return True
+    ok = getattr(m, "status", "") in SUB_OK_STATUSES or (getattr(m, "status", "") == "restricted" and getattr(m, "is_member", False))
+    if ok:
+        _sub_cache[user_id] = time.time()
+    return ok
+
+
+async def require_sub(message: Message, bot: Bot, then: str = "start") -> bool:
+    """Obuna bo'lmagan bo'lsa — kanal tugmasi va «Obuna bo'ldim» ni ko'rsatadi, False qaytaradi."""
+    if await is_subscribed(bot, message.from_user.id):
+        return True
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [ibtn("📢 Kanalga obuna bo‘lish", f"https://t.me/{REQUIRED_CHANNEL}", "primary")],
+        [InlineKeyboardButton(text="✅ Obuna bo‘ldim", callback_data=f"sub:{then}", style="success")],
+    ])
+    await message.answer(
+        "👋 Assalomu alaykum!\n\nBotdan foydalanish uchun avval rasmiy kanalimizga obuna bo‘ling — "
+        "u yerda yangi markazlar, bo‘sh joylar va chegirmalar haqida e’lon qilamiz.\n\n"
+        "Obuna bo‘lgach, <b>«✅ Obuna bo‘ldim»</b> ni bosing.",
+        reply_markup=kb,
+    )
+    return False
+
+
+@router.callback_query(F.data.startswith("sub:"))
+async def sub_check(call: CallbackQuery, state: FSMContext, bot: Bot):
+    if not await is_subscribed(bot, call.from_user.id):
+        return await call.answer("Hali obuna bo‘lmagansiz. Avval kanalga obuna bo‘ling 🙏", show_alert=True)
+    await call.answer("Rahmat! ✅")
+    try:
+        await call.message.delete()
+    except TelegramBadRequest:
+        pass
+    msg = call.message.model_copy(update={"from_user": call.from_user})  # davom etish uchun foydalanuvchi nomidan
+    if call.data == "sub:markaz":
+        return await markaz(msg, state, bot)
+    if call.data == "sub:teacher":
+        return await menu_teacher(msg, state, bot)
+    await send_welcome(msg)
+
+
+async def send_welcome(message: Message):
     name = escape(message.from_user.first_name or "")
     await message.answer(f"Assalomu alaykum{', ' + name if name else ''}! 👋", reply_markup=main_menu())
     await message.answer(
@@ -432,10 +489,23 @@ async def start(message: Message, state: FSMContext, command: CommandObject):
     )
 
 
+@router.message(CommandStart())
+async def start(message: Message, state: FSMContext, command: CommandObject, bot: Bot):
+    await state.clear()
+    arg = (command.args or "").strip()
+    if not await require_sub(message, bot, "markaz" if arg == "markaz" else "start"):
+        return
+    if arg == "markaz":  # t.me/BOT?start=markaz (ilovadagi «Markazingizni qo‘shing»)
+        return await markaz(message, state, bot)
+    await send_welcome(message)
+
+
 @router.message(F.text == BTN_INSTALL)
 @router.message(F.text == BTN_OPEN)
-async def menu_open(message: Message, state: FSMContext):
+async def menu_open(message: Message, state: FSMContext, bot: Bot):
     await state.clear()
+    if not await require_sub(message, bot):
+        return
     if message.text == BTN_INSTALL:
         kb = InlineKeyboardMarkup(inline_keyboard=[[install_btn("📲 Brauzerda ochib o‘rnatish")]])
         return await message.answer(
@@ -451,8 +521,10 @@ async def menu_open(message: Message, state: FSMContext):
 
 
 @router.message(F.text == BTN_TEACHER)
-async def menu_teacher(message: Message, state: FSMContext):
+async def menu_teacher(message: Message, state: FSMContext, bot: Bot):
     await state.clear()
+    if not await require_sub(message, bot, "teacher"):
+        return
     docs = await owner_centers(message.from_user.id)
     if not docs:
         await message.answer(
@@ -578,10 +650,12 @@ TARIFF_TEXT = (
 
 
 @router.message(Command("markaz"))
-async def markaz(message: Message, state: FSMContext):
+async def markaz(message: Message, state: FSMContext, bot: Bot):
     await state.clear()
     if message.chat.type != "private":
         return await message.answer("Markaz paneli faqat bot bilan shaxsiy chatda ishlaydi.")
+    if not await require_sub(message, bot, "markaz"):
+        return
     docs = await owner_centers(message.from_user.id)
     if not docs:
         await message.answer(
