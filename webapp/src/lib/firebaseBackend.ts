@@ -36,6 +36,7 @@ import { billingOf, extendUntil } from "./billing";
 import { ruleBasedReply } from "./match";
 import { initData, tgUser } from "./telegram";
 import { WATCH_LIMIT } from "./watch";
+import { isPhotoData, PHOTO_MAX } from "./image";
 import type { Application, AppStatus, Center, Chat, Child, Day, Message, Watch } from "./types";
 
 const ms = (t: unknown): number => {
@@ -79,7 +80,8 @@ function toCenter(id: string, d: DocumentData): Center {
     updatedMs: ms(d.updatedAt),
     claimed: d.claimed !== false,
     verified: d.verified === true,
-    verifiedMs: ms(d.verifiedAt) || null
+    verifiedMs: ms(d.verifiedAt) || null,
+    photoCount: Math.max(0, Math.min(PHOTO_MAX, num(d.photoCount) ?? 0))
   };
 }
 
@@ -282,6 +284,32 @@ export async function createFirebaseBackend(): Promise<Backend> {
             trialAt: trialMs ? Timestamp.fromMillis(trialMs) : null
           });
         },
+        async saveProfile(centerId, p) {
+          await updateDoc(doc(db, "centers", centerId), {
+            name: p.name.slice(0, 100),
+            phone: p.phone,
+            address: p.address.slice(0, 200),
+            description: p.description.slice(0, 1000),
+            amenities: p.amenities.slice(0, 12).map((a) => a.slice(0, 40)),
+            ageFrom: p.ageFrom,
+            ageTo: p.ageTo,
+            lat: p.lat,
+            lng: p.lng,
+            updatedAt: serverTimestamp()
+          });
+        },
+        async savePhotos(centerId, photos) {
+          const list = photos.filter(isPhotoData).slice(0, PHOTO_MAX);
+          // Har rasm — alohida hujjat (Firestore 1 MB chegarasi); ortiqchalari o‘chiriladi
+          const batch = writeBatch(db);
+          for (let i = 0; i < PHOTO_MAX; i++) {
+            const ref = doc(db, "centers", centerId, "photos", String(i));
+            if (i < list.length) batch.set(ref, { data: list[i], order: i });
+            else batch.delete(ref);
+          }
+          batch.update(doc(db, "centers", centerId), { photoCount: list.length, updatedAt: serverTimestamp() });
+          await batch.commit();
+        },
         async requestQr(centerId) {
           await addDoc(collection(db, "botRequests"), { type: "qr", centerId, tgId, status: "pending", createdAt: serverTimestamp() });
         }
@@ -413,6 +441,10 @@ export async function createFirebaseBackend(): Promise<Backend> {
     },
     async loadReviews() {
       return []; // Sharhlar — keyingi bosqich (README)
+    },
+    async loadPhotos(centerId) {
+      const snap = await getDocs(query(collection(db, "centers", centerId, "photos"), orderBy("order", "asc")));
+      return snap.docs.map((d) => d.data().data).filter(isPhotoData);
     },
 
     async submitApplication(input: ApplyInput) {

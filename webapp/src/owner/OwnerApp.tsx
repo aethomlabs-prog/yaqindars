@@ -1,7 +1,7 @@
 /* Ta’lim beruvchi kabineti (bot: «🎓 Ta’lim beruvchi bo‘lib kirish» → ?mode=owner).
  * Markazlarim → statistika, arizalar (Ko‘rdim / Qabul / Rad), guruhlar (bo‘sh joy ➖/➕, narx). */
 import { EmptyState, SkeletonList } from "../components/motion";
-import { AlertTriangle, CalendarClock, Check, ClipboardList, Copy, Crown, EyeOff, Eye, Gift, Hourglass, Map, Minus, Phone, Plus, QrCode, Send, Share, Users, Wallet, X } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, ClipboardList, Copy, Crown, EyeOff, Eye, Gift, Hourglass, Map, Minus, Pencil, Phone, Plus, QrCode, Send, Share, Users, Wallet, X } from "lucide-react";
 import { ADMIN_PHONE, ADMIN_TELEGRAM, PRICES, TRIAL_DAYS } from "../../config";
 import { billingOf } from "../lib/billing";
 import { useEffect, useMemo, useState } from "react";
@@ -15,6 +15,7 @@ import { fmtDate, fmtDayLabel, fmtListTime, fmtSum, fmtTime, nextLessonMs } from
 import { haptic, inTelegram, openTelegramLink, tg, tgUser } from "../lib/telegram";
 import type { Application, AppStatus, Group } from "../lib/types";
 import { useApp, useBotUsername } from "../store/app";
+import { ProfileEditSheet } from "./ProfileEditSheet";
 
 const STATUS: Record<AppStatus, { label: string; cls: string }> = {
   new: { label: "Yangi", cls: "bg-tint text-white" },
@@ -261,6 +262,7 @@ export default function OwnerApp() {
   const [apps, setApps] = useState<Application[]>([]);
   const [tab, setTab] = useState<"apps" | "groups">("apps");
   const [priceIdx, setPriceIdx] = useState<number | null>(null);
+  const [editKey, setEditKey] = useState(0); // >0 — tahrirlash oynasi ochiq (har ochilishda yangi holat)
 
   const owner = backend?.owner;
   useEffect(() => {
@@ -366,6 +368,9 @@ export default function OwnerApp() {
                   <span className="min-w-0 flex-1 truncate text-headline">{center.name}</span>
                   {center.vip && <VipBadge />}
                 </div>
+                <Button kind="tinted" size="md" className="mt-3 w-full" onClick={() => (haptic.light(), setEditKey((k) => k + 1))}>
+                  <Pencil size={16} aria-hidden /> Profilni tahrirlash · rasmlar
+                </Button>
                 <div className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-caption ${center.hidden ? "bg-red-soft text-red-text" : center.approved ? "bg-green-soft text-green-text" : "bg-gold-soft text-gold-text"}`}>
                   {center.hidden ? <EyeOff size={13} aria-hidden /> : center.approved ? <Check size={13} strokeWidth={3} aria-hidden /> : <Hourglass size={13} aria-hidden />}
                   {center.hidden ? "Xaritadan yashirilgan" : center.approved ? "Xaritada ko‘rinmoqda" : "Admin tekshiruvida"}
@@ -458,6 +463,7 @@ export default function OwnerApp() {
       )}
 
       <PriceSheet key={priceIdx ?? -1} group={priceIdx !== null && center ? center.groups[priceIdx] : null} onSave={setPrice} onClose={() => setPriceIdx(null)} />
+      {center && editKey > 0 && <ProfileEditSheet key={`${center.id}-${editKey}`} center={center} open onClose={() => setEditKey(0)} />}
       <OfflineBanner />
     </div>
   );

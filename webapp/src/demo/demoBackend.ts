@@ -28,6 +28,14 @@ function load(): DemoState {
 
 export function createDemoBackend(): Backend {
   const state = load();
+  // Markaz rasmlari (DEMO — xotirada)
+  const PKEY = "yd-demo-photos";
+  const demoPhotos = new Map<string, string[]>();
+  try {
+    Object.entries(JSON.parse(localStorage.getItem(PKEY) || "{}") as Record<string, string[]>).forEach(([k, v]) => demoPhotos.set(k, v));
+  } catch {
+    /* bo‘sh */
+  }
   // Saqlangan qidiruvlar (DEMO — qurilmada)
   const WKEY = "yd-demo-watches";
   let watches: Watch[] = [];
@@ -220,7 +228,7 @@ export function createDemoBackend(): Backend {
       const id = `quick${adminCenters.length}`;
       adminCenters.unshift({
         id, name: input.name, address: "Xaritada ko‘rsatilgan", lat: input.lat, lng: input.lng, phone: input.phone, amenities: [], vip: false,
-        rating: null, reviewsCount: 0, description: "", ageFrom: null, ageTo: null, photoUrl: null, kind: "center", teachers: [], claimed: false, verified: false, verifiedMs: null,
+        rating: null, reviewsCount: 0, description: "", ageFrom: null, ageTo: null, photoUrl: null, kind: "center", teachers: [], claimed: false, verified: false, verifiedMs: null, photoCount: 0,
         groups: (input.subjects.length ? input.subjects : ["Boshqa"]).map((subject) => ({ subject, days: [], time: "", price: input.price, freeSeats: 0 })),
         updatedMs: Date.now(), approved: true, tariff: null, ownerTgId: null, ownerUsername: null, createdMs: Date.now(), paidUntilMs: null
       });
@@ -248,6 +256,26 @@ export function createDemoBackend(): Backend {
       async setApplicationStatus(app, status, trialMs) {
         const a = ownerApps.find((x) => x.id === app.id);
         if (a) Object.assign(a, { status, trialMs });
+        ownerEmit();
+      },
+      async saveProfile(centerId, p) {
+        const c = mine.find((x) => x.id === centerId);
+        if (c) Object.assign(c, p, { updatedMs: Date.now() });
+        const pub = DEMO_CENTERS.find((x) => x.id === centerId);
+        if (pub) Object.assign(pub, p, { updatedMs: Date.now() });
+        ownerEmit();
+      },
+      async savePhotos(centerId, photos) {
+        demoPhotos.set(centerId, photos.slice(0, 5));
+        try {
+          localStorage.setItem(PKEY, JSON.stringify(Object.fromEntries(demoPhotos)));
+        } catch {
+          /* joy yetmadi — faqat shu sessiyada */
+        }
+        for (const list of [mine, DEMO_CENTERS]) {
+          const c = list.find((x) => x.id === centerId);
+          if (c) c.photoCount = Math.min(5, photos.length);
+        }
         ownerEmit();
       },
       async requestQr() {
@@ -283,6 +311,9 @@ export function createDemoBackend(): Backend {
     async loadCenters() {
       await new Promise((r) => setTimeout(r, 450)); // skeleton ko‘rinsin
       return structuredClone(DEMO_CENTERS);
+    },
+    async loadPhotos(centerId) {
+      return demoPhotos.get(centerId) ?? [];
     },
     async loadReviews(centerId) {
       const c = DEMO_CENTERS.find((x) => x.id === centerId);

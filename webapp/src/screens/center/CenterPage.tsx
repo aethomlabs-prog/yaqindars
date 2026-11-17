@@ -3,6 +3,7 @@ import { EmptyState, SeatChip } from "../../components/motion";
 import { AlertTriangle, BellPlus, Clock, Heart, KeyRound, MapPin, MessageCircle, Navigation, Phone, Share, Star, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Rating, UnverifiedBadge } from "../../components/cards";
+import { Carousel } from "../../components/Carousel";
 import { SubjectIcon } from "../../components/brand";
 import { Avatar, Button, VipBadge } from "../../components/ios/controls";
 import { Section } from "../../components/ios/Grouped";
@@ -71,6 +72,21 @@ export function CenterPage({ centerId }: { centerId: string }) {
   const [chatBusy, setChatBusy] = useState(false);
   const [claimState, setClaimState] = useState<"idle" | "busy" | "sent">("idle");
   const [trustOpen, setTrustOpen] = useState(false);
+  const [photos, setPhotos] = useState<string[] | null>(null);
+
+  // Rasmlar faqat sahifa ochilganda yuklanadi (ro‘yxat va xarita yengil qoladi)
+  useEffect(() => {
+    if (!backend || !c || (!c.photoCount && !IS_DEMO)) return setPhotos([]);
+    let alive = true;
+    setPhotos(null);
+    backend
+      .loadPhotos(c.id)
+      .then((p) => alive && setPhotos(p))
+      .catch(() => alive && setPhotos([]));
+    return () => {
+      alive = false;
+    };
+  }, [backend, c?.id, c?.photoCount]); // eslint-disable-line react-hooks/exhaustive-deps
   const [reportOpen, setReportOpen] = useState(false);
 
   // Ko‘rishlar hisobi (egasining haftalik hisoboti uchun; sessiyada bir marta)
@@ -102,6 +118,7 @@ export function CenterPage({ centerId }: { centerId: string }) {
   const fav = favorites.includes(c.id);
   const stale = isStale(c.updatedMs);
   const minPrice = c.groups.length ? Math.min(...c.groups.map((g) => g.price)) : 0;
+  const freeTotal = c.groups.reduce((sum, g) => sum + g.freeSeats, 0);
   const firstFree = Math.max(0, c.groups.findIndex((g) => g.freeSeats > 0));
   const title = c.name.replace(/^Namuna:\s*/, "");
 
@@ -209,28 +226,51 @@ export function CenterPage({ centerId }: { centerId: string }) {
       }
     >
       <div style={{ paddingBottom: 80 }}>
-        {/* Sarlavha bloki */}
-        <div className="flex flex-col items-center px-6 pt-2 text-center">
-          {c.kind === "tutor" ? (
-            <Avatar name={c.name} src={c.photoUrl} size={88} />
-          ) : c.photoUrl ? (
-            <img src={c.photoUrl} alt="" className="h-[88px] w-[88px] rounded-[24px] object-cover" />
-          ) : (
-            <div className="flex h-[88px] w-[88px] items-center justify-center rounded-[24px] bg-tint text-[38px] font-bold text-white" aria-hidden>
-              {title[0]}
-            </div>
-          )}
-          <h1 className="mt-3 text-title">{c.name}</h1>
-          <div className="mt-1.5 flex flex-wrap items-center justify-center gap-2 text-footnote text-ink2">
+        {/* Rasmlar (ixtiyoriy, 1–5 ta) — karusel */}
+        {photos && photos.length > 0 ? (
+          <div className="px-4 pt-1">
+            <Carousel photos={photos} alt={title} />
+          </div>
+        ) : photos === null && c.photoCount > 0 ? (
+          <div className="mx-4 mt-1 aspect-[4/3] animate-pulse rounded-[20px] bg-card2" aria-hidden />
+        ) : null}
+
+        {/* Sarlavha: nomi, belgilar, bir qatorda asosiy ma’lumot */}
+        <div className={`px-5 ${photos?.length ? "pt-4" : "flex flex-col items-center pt-2 text-center"}`}>
+          {!photos?.length &&
+            (c.kind === "tutor" ? (
+              <Avatar name={c.name} src={c.photoUrl} size={80} />
+            ) : (
+              <div className="flex h-[80px] w-[80px] items-center justify-center rounded-[22px] bg-tint text-[34px] font-bold text-white" aria-hidden>
+                {title[0]}
+              </div>
+            ))}
+          <h1 className={`text-title ${photos?.length ? "" : "mt-3"}`}>{title}</h1>
+          <div className={`mt-1.5 flex flex-wrap items-center gap-1.5 text-footnote text-ink2 ${photos?.length ? "" : "justify-center"}`}>
             {c.vip && <VipBadge large />}
             {c.verified && <VerifiedBadge large onClick={() => setTrustOpen(true)} />}
             {!c.claimed && <UnverifiedBadge large />}
-            <span>{c.kind === "tutor" ? "Repetitor" : "O‘quv markazi"}</span>
             {c.rating ? <Rating value={c.rating} count={c.reviewsCount} /> : <span className="rounded-full bg-green-soft px-2 py-0.5 text-caption font-semibold text-green-text">Yangi</span>}
           </div>
           <p className="mt-1.5 text-footnote text-ink2">
-            <span className="tnum">{formatDistance(km)}</span> · {c.address}
+            {c.kind === "tutor" ? "Repetitor" : "O‘quv markazi"} · <span className="tnum">{formatDistance(km)}</span> · {c.address}
           </p>
+        </div>
+
+        {/* Asosiy uch fakt: narx, bo‘sh joy, yosh */}
+        <div className="mx-4 mt-4 grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-[14px] bg-card px-2 py-2.5">
+            <div className="tnum truncate text-subhead font-semibold">{minPrice > 0 ? `${Math.round(minPrice / 1000)} ming` : "—"}</div>
+            <div className="text-caption text-ink2">oyiga, dan</div>
+          </div>
+          <div className="rounded-[14px] bg-card px-2 py-2.5">
+            <div className={`tnum text-subhead font-semibold ${freeTotal ? "text-green-text" : "text-red-text"}`}>{freeTotal || "Yo‘q"}</div>
+            <div className="text-caption text-ink2">bo‘sh joy</div>
+          </div>
+          <div className="rounded-[14px] bg-card px-2 py-2.5">
+            <div className="tnum text-subhead font-semibold">{c.ageFrom != null && c.ageTo != null ? `${c.ageFrom}–${c.ageTo}` : "—"}</div>
+            <div className="text-caption text-ink2">yosh</div>
+          </div>
         </div>
 
         {/* Tez amallar */}

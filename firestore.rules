@@ -61,7 +61,33 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['groups', 'updatedAt'])
         && request.resource.data.groups is list && request.resource.data.groups.size() <= 10
         && request.resource.data.updatedAt == request.time;
+      // Egasi: profilini o'zgartiradi (nomi, telefon, manzil, tavsif, sharoitlar, yosh, xaritadagi joy, rasmlar soni)
+      allow update: if isTg(resource.data.ownerTgId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+             ['name', 'phone', 'address', 'description', 'amenities', 'ageFrom', 'ageTo', 'lat', 'lng', 'photoCount', 'updatedAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 100
+        && request.resource.data.phone is string && request.resource.data.phone.matches('^\\+998[0-9]{9}$')
+        && request.resource.data.address is string && request.resource.data.address.size() <= 200
+        && request.resource.data.get('description', '') is string && request.resource.data.get('description', '').size() <= 1000
+        && request.resource.data.get('amenities', []) is list && request.resource.data.get('amenities', []).size() <= 12
+        && (request.resource.data.get('ageFrom', null) == null || (request.resource.data.ageFrom is int && request.resource.data.ageFrom >= 0 && request.resource.data.ageFrom <= 99))
+        && (request.resource.data.get('ageTo', null) == null || (request.resource.data.ageTo is int && request.resource.data.ageTo >= 0 && request.resource.data.ageTo <= 99))
+        && request.resource.data.lat is number && request.resource.data.lng is number
+        && (request.resource.data.get('photoCount', 0) is int && request.resource.data.get('photoCount', 0) >= 0 && request.resource.data.get('photoCount', 0) <= 5)
+        && request.resource.data.updatedAt == request.time;
       allow delete: if false;
+
+      // Markaz rasmlari: 0..4 hujjat, telefonda siqilgan JPEG (data URL, ~170 KB gacha). Faqat egasi yozadi.
+      match /photos/{n} {
+        allow read: if get(/databases/$(database)/documents/centers/$(id)).data.approved == true || ownsCenter(id) || isAdmin();
+        allow delete: if ownsCenter(id) && n in ['0', '1', '2', '3', '4'];
+        allow create, update: if ownsCenter(id) && n in ['0', '1', '2', '3', '4']
+          && request.resource.data.keys().hasOnly(['data', 'order'])
+          && request.resource.data.data is string
+          && request.resource.data.data.size() <= 240000
+          && request.resource.data.data[0:23] == 'data:image/jpeg;base64,'
+          && request.resource.data.order == int(n);
+      }
     }
 
     // «Bu mening markazim»: ID = "<tgId>_<markazId>" (bitta markazga bitta so'rov). Admin botda tasdiqlaydi.

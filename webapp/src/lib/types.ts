@@ -41,6 +41,8 @@ export interface Center {
   /** «✓ Tasdiqlangan»: admin manzil, telefon va faoliyatni tekshirgan */
   verified: boolean;
   verifiedMs: number | null;
+  /** markaz rasmlari soni (0–5); rasmlar sahifa ochilganda alohida yuklanadi */
+  photoCount: number;
 }
 
 export type AppStatus = "new" | "seen" | "accepted" | "rejected";

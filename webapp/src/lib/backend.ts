@@ -35,6 +35,19 @@ export interface OwnerCenter extends Center {
   hidden?: boolean;
 }
 
+/** Kabinetda tahrirlanadigan profil maydonlari */
+export interface ProfilePatch {
+  name: string;
+  phone: string;
+  address: string;
+  description: string;
+  amenities: string[];
+  ageFrom: number | null;
+  ageTo: number | null;
+  lat: number;
+  lng: number;
+}
+
 /** Admin dashboard */
 export interface AdminCenter extends OwnerCenter {
   ownerTgId: number | null;
@@ -101,6 +114,10 @@ export interface OwnerApi {
   saveGroups(centerId: string, groups: Group[]): Promise<void>;
   watchCenterApplications(centerId: string, cb: (a: Application[]) => void): Unsub;
   setApplicationStatus(app: Application, status: AppStatus, trialMs: number | null): Promise<void>;
+  /** Profilni o‘zgartirish (nomi, telefon, manzil, tavsif, sharoitlar, yosh, xaritadagi joy) */
+  saveProfile(centerId: string, patch: ProfilePatch): Promise<void>;
+  /** Rasmlar (0–5 ta, siqilgan JPEG data URL) — tartibi bilan, birinchisi — muqova */
+  savePhotos(centerId: string, photos: string[]): Promise<void>;
   /** Bot QR posterini (PNG) Telegram’ga yuboradi */
   requestQr(centerId: string): Promise<void>;
 }
@@ -136,6 +153,8 @@ export interface Backend {
 
   loadCenters(): Promise<Center[]>;
   loadReviews(centerId: string): Promise<Review[]>;
+  /** Markaz rasmlari (karusel uchun) */
+  loadPhotos(centerId: string): Promise<string[]>;
 
   submitApplication(input: ApplyInput): Promise<Application>;
   watchApplications(cb: (apps: Application[]) => void): Unsub;
