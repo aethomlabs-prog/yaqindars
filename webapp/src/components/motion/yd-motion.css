@@ -71,6 +71,12 @@
 .yd-pin-ring{position:absolute;left:50%;bottom:-2px;width:22px;height:10px;margin-left:-11px;border-radius:50%;background:var(--yd-green);opacity:0}
 .yd-pin-free .yd-pin-ring,.yd-pin-vip .yd-pin-ring{animation:yd-ground 1.8s ease-out infinite}
 .yd-pin-vip svg{animation:yd-pin-in .35s var(--yd-spring) both,yd-glow 2.4s 1s ease-in-out infinite}
+/* VIP: oltin nur — yumshoq, sekin «nafas oladi» */
+.yd-pin-vip .yd-pin-ring{background:var(--yd-gold)}
+.yd-pin-halo{position:absolute;left:50%;top:38%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(245,183,0,.55) 0%,rgba(245,183,0,.22) 45%,rgba(245,183,0,0) 70%);animation:yd-halo 2.6s ease-in-out infinite}
+@keyframes yd-halo{0%,100%{transform:scale(.75);opacity:.55}50%{transform:scale(1.15);opacity:1}}
+@media (prefers-reduced-motion:reduce){.yd-pin-halo{animation:none;opacity:.7}}
 .yd-pin.is-sel svg{animation:yd-select .45s var(--yd-spring) both}
 .yd-pin.is-sel{z-index:1000!important}
 .yd-cluster{background:none;border:0}

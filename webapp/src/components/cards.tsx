@@ -36,7 +36,7 @@ export function CenterRow({ c, km, free, minPrice, subjects, i = 0, onOpen }: { 
     <button
       {...listItem(i)}
       onClick={onOpen ?? (() => push({ name: "center", centerId: c.id }))}
-      className="focus-ring pressable flex w-full gap-3 rounded-card bg-card p-3.5 text-left shadow-card"
+      className={`focus-ring pressable flex w-full gap-3 rounded-card p-3.5 text-left shadow-card ${c.vip ? "bg-gold-soft ring-1 ring-[#F5B700]/60" : "bg-card"}`}
     >
       <SubjectIcon name={subjects[0] ?? "Boshqa"} size={48} />
       <div className="min-w-0 flex-1">

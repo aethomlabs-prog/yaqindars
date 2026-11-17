@@ -15,6 +15,7 @@ export function pinIcon(L: typeof Leaflet, state: PinState, selected = false): L
   return L.divIcon({
     className: `yd-pin yd-pin-${state}${selected ? " is-sel" : ""}`,
     html:
+      (state === "vip" ? `<span class="yd-pin-halo"></span>` : "") +
       `<span class="yd-pin-ring"></span>` +
       `<svg viewBox="0 0 100 120" width="${w}" height="${h}" aria-hidden="true">` +
       `<path d="${PIN}"/><circle cx="50" cy="46" r="19" fill="#fff"/></svg>`,

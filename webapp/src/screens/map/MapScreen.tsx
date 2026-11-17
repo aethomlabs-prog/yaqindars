@@ -22,7 +22,8 @@ import { BaseTiles, LayerToggle, MeMarker, useBaseLayer, useMapAutoSize } from "
 import { FilterSheet } from "./FilterSheet";
 
 /* ---------- Marker ikonkalari: components/motion (jonli pinlar) ---------- */
-const pinState = (v: Visible): PinState => (v.free <= 0 ? "full" : v.center.vip ? "vip" : "free");
+// VIP — doim oltin (bo‘sh joyi bo‘lmasa ham), ortida yumshoq nur
+const pinState = (v: Visible): PinState => (v.center.vip ? "vip" : v.free <= 0 ? "full" : "free");
 
 /** Tanlangan manzil (Uy, Maktab…) — yashil pin */
 const addressIcon = L.divIcon({
