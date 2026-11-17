@@ -2,11 +2,32 @@
 import { distanceKm } from "./geo";
 import { fmtSum } from "./format";
 import type { Center, Day, LatLng } from "./types";
+import { SUBJECT_META } from "../components/brand";
 
-export const SUBJECTS = ["Ingliz tili", "Matematika", "IT", "Rus tili", "Kimyo", "Biologiya", "Fizika", "Ona tili", "Sport", "Shaxmat", "Boshqa"];
+export const SUBJECTS = SUBJECT_META.map((s) => s.name);
 
 const SUBJECT_WORDS: Record<string, string[]> = {
-  "Ingliz tili": ["ingliz", "english", "ielts", "inglis"],
+  "Ingliz tili": ["ingliz", "english", "inglis"],
+  IELTS: ["ielts", "aylts", "ayelts"],
+  CEFR: ["cefr", "sefr", "multilevel", "milliy sertifikat"],
+  SAT: ["sat "],
+  Tarix: ["tarix"],
+  Geografiya: ["geograf"],
+  Huquq: ["huquq"],
+  Iqtisodiyot: ["iqtisod", "ekonom", "buxgalter"],
+  "Nemis tili": ["nemis", "german"],
+  "Koreys tili": ["koreys", "korean", "topik"],
+  "Turk tili": ["turk"],
+  "Arab tili": ["arab"],
+  "Xitoy tili": ["xitoy", "chinese", "hsk"],
+  "Fransuz tili": ["fransuz", "french"],
+  "DTM / Abituriyent": ["dtm", "abituriyent", "test markaz", "oliygoh"],
+  Robototexnika: ["robot"],
+  "Mental arifmetika": ["mental", "arifmetika"],
+  "Maktabga tayyorlov": ["maktabga tayyor", "bog‘cha", "bogcha"],
+  "Boshlang‘ich sinf": ["boshlang"],
+  Rasm: ["rasm", "chizish", "art"],
+  Musiqa: ["musiqa", "pianino", "gitara", "vokal"],
   Matematika: ["matem", "algebra", "geometr"],
   IT: ["it ", "it,", "dastur", "kompyuter", "python", "programm", "informat"],
   "Rus tili": ["rus"],

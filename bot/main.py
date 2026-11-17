@@ -193,7 +193,13 @@ USERS = db.collection("users")
 DELETE_REQS = db.collection("deleteRequests")
 AI_REQS = db.collection("aiRequests")  # ilovadagi AI yordamchi savollari  # ilovadagi «Ma’lumotlarimni o‘chirish»
 
-SUBJECTS = ["Ingliz tili", "Matematika", "IT", "Rus tili", "Kimyo", "Biologiya", "Fizika", "Ona tili", "Sport", "Boshqa"]
+# webapp/src/components/brand.tsx SUBJECT_META bilan bir xil ("Boshqa" — oxirida, o'z fanini yozish uchun)
+SUBJECTS = [
+    "Ingliz tili", "IELTS", "CEFR", "SAT", "Matematika", "IT", "Rus tili", "Ona tili", "Kimyo", "Biologiya", "Fizika",
+    "Tarix", "Geografiya", "Huquq", "Iqtisodiyot", "Nemis tili", "Koreys tili", "Turk tili", "Arab tili", "Xitoy tili",
+    "Fransuz tili", "DTM / Abituriyent", "Robototexnika", "Mental arifmetika", "Maktabga tayyorlov", "Boshlang‘ich sinf",
+    "Rasm", "Musiqa", "Sport", "Shaxmat", "Boshqa",
+]
 PRICE_MIN, PRICE_MAX = 10_000, 10_000_000
 SEATS_MAX = 100
 REMIND_AFTER = timedelta(days=7)
@@ -351,7 +357,7 @@ def subjects_kb():
     rows, row = [], []
     for i, s in enumerate(SUBJECTS):
         row.append(btn(s, "subj", i))
-        if len(row) == 2:
+        if len(row) == 3:
             rows.append(row)
             row = []
     if row:

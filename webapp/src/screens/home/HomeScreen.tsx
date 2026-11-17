@@ -8,14 +8,16 @@ import { listItem } from "../../components/ios/motion";
 import { Page } from "../../components/ios/Page";
 import { fmtDayLabel, fmtPriceFrom, fmtTime } from "../../lib/format";
 import { distanceKm, formatDistance, routeUrl } from "../../lib/geo";
-import { openLink, openTelegramLink } from "../../lib/telegram";
+import { haptic, openLink, openTelegramLink } from "../../lib/telegram";
+import { SUBJECTS } from "../../lib/match";
 import { displayName, IS_DEMO, useApp, useApplications, useCenter, useOrigin, useBotUsername } from "../../store/app";
 import { useFilters } from "../../store/filters";
 import { useNav } from "../../store/nav";
 import { AddressSheet } from "./AddressSheet";
 import HomeBanner from "../../components/HomeBanner";
 
-const GRID = ["Ingliz tili", "Matematika", "IT", "Rus tili", "Kimyo", "Biologiya", "Sport"];
+const GRID = ["Ingliz tili", "IELTS", "CEFR", "SAT", "Matematika", "IT", "Rus tili"];
+const MORE = SUBJECTS.filter((s) => !GRID.includes(s) && s !== "Boshqa");
 
 function SectionTitle({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
   return (
@@ -153,6 +155,7 @@ export function HomeScreen() {
     }
   };
 
+  const [allSubjects, setAllSubjects] = useState(false);
   const openSubject = (s: string | null) => {
     setFilters({ subject: s });
     setTab("map");
@@ -186,17 +189,17 @@ export function HomeScreen() {
         <HomeBanner onAction={onBanner} />
       </div>
 
-      {/* Fanlar grid: 2 × 4 */}
+      {/* Fanlar: asosiylari + «Hammasi» bosilsa qolgan barcha fanlar shu yerning o‘zida ochiladi */}
       <div className="mx-4 mt-5 grid grid-cols-4 gap-y-4 rounded-card bg-card px-2 py-4 shadow-card">
-        {GRID.map((s) => (
+        {(allSubjects ? [...GRID, ...MORE] : GRID).map((s) => (
           <button key={s} onClick={() => openSubject(s)} className="focus-ring pressable flex flex-col items-center gap-1.5">
             <SubjectIcon name={s} size={48} />
-            <span className="max-w-full truncate px-0.5 text-caption text-ink">{s}</span>
+            <span className="line-clamp-2 max-w-full text-center text-caption leading-tight tracking-tight text-ink">{s}</span>
           </button>
         ))}
-        <button onClick={() => openSubject(null)} className="focus-ring pressable flex flex-col items-center gap-1.5">
+        <button onClick={() => (haptic.selection(), setAllSubjects((v) => !v))} aria-expanded={allSubjects} className="focus-ring pressable flex flex-col items-center gap-1.5">
           <SubjectIcon name="Boshqa" size={48} />
-          <span className="text-caption text-ink">Yana</span>
+          <span className="text-caption text-ink">{allSubjects ? "Yopish" : "Hammasi"}</span>
         </button>
       </div>
 

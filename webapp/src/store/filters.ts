@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { distanceKm } from "../lib/geo";
+import { SUBJECTS } from "../lib/match";
 import type { Center, Day, LatLng } from "../lib/types";
 
 export const PRICE_MIN = 100000;
@@ -62,7 +63,7 @@ export function filterCenters(centers: Center[], f: Filters, pos: LatLng): Visib
     const groups: number[] = [];
     c.groups.forEach((g, i) => {
       if (f.subject && f.subject !== "Boshqa" && g.subject !== f.subject) return;
-      if (f.subject === "Boshqa" && ["Ingliz tili", "Matematika", "IT", "Rus tili", "Kimyo", "Biologiya", "Fizika", "Ona tili", "Sport", "Shaxmat"].includes(g.subject)) return;
+      if (f.subject === "Boshqa" && SUBJECTS.includes(g.subject) && g.subject !== "Boshqa") return;
       // Slayder chetlari «cheksiz» degani: 100 ming dan arzon va 600 ming dan qimmat guruhlar ham chiqadi
       if ((f.priceMin > PRICE_MIN && g.price < f.priceMin) || (f.priceMax < PRICE_MAX && g.price > f.priceMax)) return;
       if (f.days.length && !g.days.every((d) => f.days.includes(d))) return;
