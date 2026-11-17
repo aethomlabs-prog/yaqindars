@@ -452,3 +452,7 @@ Har relizdan oldin **ikkala** telefonda o‘ting. Muammo bo‘lsa, ilovani `?deb
 | 28 | «Hammasiga eslatma» | Eskirgan markaz egalariga xabar; adminga «N ta egaga eslatma yuborildi» | ☐ | ☐ |
 | 29 | Admin: Markazlar → «Tasdiqlash ✓» | Ilovada markazda yashil «Tasdiqlangan»; bosilsa izoh oynasi | ☐ | ☐ |
 | 30 | Markaz → «Ma’lumot noto‘g‘ri?» → sabab → «Adminga yuborish» | Adminga shikoyat; «Ko‘rib chiqildi» → yuborganga «Rahmat» | ☐ | ☐ |
+| 31 | Yangi akkauntdan botga `/start` (kanalga obuna bo‘lmagan) | «Kanalga obuna bo‘ling» + «✅ Obuna bo‘ldim»; obunadan keyin salom xabari | ☐ | ☐ |
+| 32 | Kabinet → «Profilni tahrirlash · rasmlar» → 3 ta rasm, tavsif → Saqlash | Markaz sahifasida karusel (surish, 1/3), yangi tavsif | ☐ | ☐ |
+| 33 | Kabinet oxiri → «Xulosa» | Natijalar matni va QR poster; «Posterni Telegram’ga olish» → botda PNG | ☐ | ☐ |
+| 34 | Xarita | VIP markazlar sariq pin, ortida yumshoq nur; ro‘yxatda sariq kartochka | ☐ | ☐ |

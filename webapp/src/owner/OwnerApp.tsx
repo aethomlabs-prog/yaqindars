@@ -1,7 +1,7 @@
 /* Ta’lim beruvchi kabineti (bot: «🎓 Ta’lim beruvchi bo‘lib kirish» → ?mode=owner).
  * Markazlarim → statistika, arizalar (Ko‘rdim / Qabul / Rad), guruhlar (bo‘sh joy ➖/➕, narx). */
 import { EmptyState, SkeletonList } from "../components/motion";
-import { AlertTriangle, CalendarClock, Check, ClipboardList, Copy, Crown, EyeOff, Eye, Gift, Hourglass, Map, Minus, Pencil, Phone, Plus, QrCode, Send, Share, Users, Wallet, X } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, ClipboardList, Crown, EyeOff, Eye, Gift, Hourglass, Map, Minus, Pencil, Phone, Plus, Send, Users, Wallet, X } from "lucide-react";
 import { ADMIN_PHONE, ADMIN_TELEGRAM, PRICES, TRIAL_DAYS } from "../../config";
 import { billingOf } from "../lib/billing";
 import { useEffect, useMemo, useState } from "react";
@@ -14,8 +14,9 @@ import type { OwnerCenter } from "../lib/backend";
 import { fmtDate, fmtDayLabel, fmtListTime, fmtSum, fmtTime, nextLessonMs } from "../lib/format";
 import { haptic, inTelegram, openTelegramLink, tg, tgUser } from "../lib/telegram";
 import type { Application, AppStatus, Group } from "../lib/types";
-import { useApp, useBotUsername } from "../store/app";
+import { useApp } from "../store/app";
 import { ProfileEditSheet } from "./ProfileEditSheet";
+import { SummaryCard } from "./SummaryCard";
 
 const STATUS: Record<AppStatus, { label: string; cls: string }> = {
   new: { label: "Yangi", cls: "bg-tint text-white" },
@@ -199,61 +200,6 @@ Markaz ID: ${c.id}`);
   );
 }
 
-/** «📲 Mening QR’im»: markaz havolasi (t.me/BOT?startapp=c_ID) va chop etiladigan QR poster (bot yuboradi) */
-function QrCard({ c }: { c: OwnerCenter }) {
-  const owner = useApp((s) => s.backend?.owner);
-  const showToast = useApp((s) => s.showToast);
-  const bot = useBotUsername();
-  const [busy, setBusy] = useState(false);
-  const link = bot ? `https://t.me/${bot}?startapp=c_${c.id}` : "";
-  const name = c.name.replace(/^Namuna:\s*/, "");
-  const send = async () => {
-    if (!owner) return;
-    setBusy(true);
-    try {
-      await owner.requestQr(c.id);
-      haptic.success();
-      showToast("QR poster botga yuborildi — Telegram chatini oching", "ok");
-    } catch {
-      showToast("Yuborib bo‘lmadi. Botda /qr yozing.", "error");
-    } finally {
-      setBusy(false);
-    }
-  };
-  const copy = () =>
-    navigator.clipboard
-      ?.writeText(link)
-      .then(() => (haptic.light(), showToast("Havola nusxalandi", "ok")))
-      .catch(() => showToast("Nusxalab bo‘lmadi", "error"));
-  const share = () => openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(`${name} — bepul sinov darsiga yoziling`)}`);
-  return (
-    <div className="mx-4 mt-3 rounded-card bg-card p-4 shadow-card">
-      <h2 className="flex items-center gap-2 text-headline">
-        <QrCode size={18} className="text-tint" aria-hidden /> Mening QR’im
-      </h2>
-      <p className="mt-1 text-footnote text-ink2">Eshikka, e’lonlarga, Instagram’ga joylang — skanerlagan ota-ona to‘g‘ri markazingiz sahifasiga tushadi.</p>
-      {link && (
-        <div className="tnum mt-3 truncate rounded-[10px] bg-card2 px-3 py-2 font-mono text-footnote" title={link}>
-          {link.replace("https://", "")}
-        </div>
-      )}
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-        <Button size="md" className="flex-1" loading={busy} disabled={!owner} onClick={send}>
-          <QrCode size={17} aria-hidden /> QR posterni olish (PNG)
-        </Button>
-        <div className="flex gap-2">
-          <Button kind="tinted" size="md" className="flex-1" disabled={!link} onClick={copy}>
-            <Copy size={17} aria-hidden /> Nusxalash
-          </Button>
-          <Button kind="tinted" size="md" className="flex-1" disabled={!link} onClick={share}>
-            <Share size={17} aria-hidden /> Ulashish
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function OwnerApp() {
   const backend = useApp((s) => s.backend);
   const showToast = useApp((s) => s.showToast);
@@ -383,7 +329,6 @@ export default function OwnerApp() {
               </div>
 
               <AccountCard c={center} />
-              {center.approved && <QrCard c={center} />}
 
               <div className="mx-4 mt-3 flex gap-2.5">
                 <Stat icon={<ClipboardList size={17} />} value={stats.fresh} label="Yangi ariza" tone="#1E6FD9" />
@@ -454,7 +399,9 @@ export default function OwnerApp() {
             </>
           )}
 
-          <div className="mx-4 mt-8">
+          {center && <SummaryCard c={center} apps={apps} />}
+
+          <div className="mx-4 mt-6">
             <Button kind="tinted" className="w-full" onClick={goMainApp}>
               <Map size={19} aria-hidden /> Ota-onalar ko‘rinishida ochish
             </Button>

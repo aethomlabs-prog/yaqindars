@@ -2324,12 +2324,13 @@ def start_claim_watcher(bot: Bot, loop: asyncio.AbstractEventLoop):
 async def send_center_qr(bot: Bot, chat_id: int, cid: str, c: dict):
     name = clean_name(c.get("name"))
     link = center_link(cid)
-    png = await asyncio.to_thread(make_poster, name, link, BOT_USERNAME)
+    sub = "Repetitor · bepul sinov darsi" if c.get("kind") == "tutor" else "O‘quv markazi · bepul sinov darsi"
+    png = await asyncio.to_thread(make_poster, name, link, BOT_USERNAME, sub)
     await bot.send_document(
         chat_id,
         BufferedInputFile(png, filename=f"yaqindars-qr-{cid[:8]}.png"),
         caption=(
-            f"📲 <b>{escape(name)}</b> — QR kod (1200×1500, chop etishga tayyor)\n\n"
+            f"📲 <b>{escape(name)}</b> — QR poster (1600×1600, chop etishga tayyor)\n\n"
             f"🔗 {link}\n\n"
             "Eshikka, e’lonlarga, Instagram’ga joylang: skanerlagan ota-ona to‘g‘ridan-to‘g‘ri markazingiz sahifasiga tushadi."
         ),
@@ -2367,7 +2368,7 @@ async def link_cmd(message: Message, command: CommandObject, bot: Bot):
             f"{lines}\n\nO‘zingiznikini ham yozish mumkin (lotin harflari, raqam, _): <code>/link bozor_banner</code>"
         )
     link = campaign_link(slug)
-    png = await asyncio.to_thread(make_poster, "Rishtondagi o‘quv markazlari va repetitorlar", link, BOT_USERNAME,
+    png = await asyncio.to_thread(make_poster, "Uyingga yaqin kursni toping", link, BOT_USERNAME,
                                   "Bo‘sh joylar · narxlar · bepul sinov darsi")
     await bot.send_document(message.chat.id, BufferedInputFile(png, filename=f"yaqindars-{slug}.png"),
                             caption=f"🔗 <b>{slug}</b> kampaniyasi:\n{link}\n\nPoster — chop etish uchun.")

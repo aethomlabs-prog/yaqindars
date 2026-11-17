@@ -10,14 +10,15 @@ Tartib bilan bajaring — ☐ belgisini ☑ ga almashtirib boring.
 | # | Nima | Qayerda | Nega |
 |---|---|---|---|
 | ☐ A | **Groq kalitini almashtirish** | console.groq.com → API Keys → eski kalitni **Revoke**, yangisini yarating → `bot/.env` dagi `GROQ_API_KEY` (va Railway Variables) | Eski kalit bir marta `.env.example` orqali GitHub’ga tushishiga oz qolgan edi — xavfsizlik uchun almashtiring |
-| ☐ B | **Firestore qoidalarini qayta joylash** | Firebase Console → Firestore → Rules → `firestore.rules` ni to‘liq qo‘yib **Publish** | Yangi kolleksiyalar: claimRequests, claimCodes, botRequests, centerStats, dailyStats, sourceStats, watches, watchDaily, ratings, reports, system. Joylanmasa — egallash, QR, kuzatuv, shikoyat, statistika ishlamaydi |
+| ☐ B | **Firestore qoidalarini qayta joylash** | Firebase Console → Firestore → Rules → `firestore.rules` ni to‘liq qo‘yib **Publish** | Yangi kolleksiyalar: claimRequests, claimCodes, botRequests, centerStats, dailyStats, sourceStats, watches, watchDaily, ratings, reports, system, centers/*/photos (rasmlar) va profilni tahrirlash. Joylanmasa — egallash, QR, kuzatuv, shikoyat, statistika ishlamaydi |
 | ☐ C | **Inline rejimni yoqish** | @BotFather → `/setinline` → @yaqindars_bot → `fan yoki markaz nomi` | `@yaqindars_bot ingliz` va ilovadagi rasmli «Ulashish» |
 | ☐ D | **Main Mini App** | @BotFather → `/mybots` → bot → Bot Settings → **Configure Mini App** → Enable → Vercel manzili | `t.me/yaqindars_bot?startapp=c_…` (QR) va `?startapp=src_…` (kampaniya) havolalari to‘g‘ridan-to‘g‘ri ilovani ochishi uchun |
 | ☐ E | **Railway’ga ko‘chirish** | README → «Railway — qadamma-qadam» | 24/7, `/health`, avtomatik qayta ishga tushish |
 | ☐ F | **Kompyuterdagi botni to‘xtatish** | Railway logida «Yagona nusxa qulfi olindi» chiqqach | Ikkinchi nusxa baribir kutib turadi, lekin kompyuter resursini band qilmasin |
 | ☐ G | **UptimeRobot** | README → «Monitoring: UptimeRobot» | Bot to‘xtasa 5 daqiqada xabar |
 | ☐ H | **Kompyuterda bot ishlatsangiz** | `cd bot` → `venv\Scriptsctivate` → `pip install -U -r requirements.txt` | QR poster uchun `qrcode` va `Pillow` qo‘shildi |
-| ☐ I | **Telefonda sinash** | README → ro‘yxatning 16–30 qadamlari | Yangi funksiyalar |
+| ☐ I | **Telefonda sinash** | README → ro‘yxatning 16–34 qadamlari | Yangi funksiyalar |
+| ☐ J | **Bot @yaqindars kanalida admin bo‘lib qolsin** | Kanal → Administratorlar | Obunani tekshirish uchun shart (hozir admin — tekshirildi). Admin bo‘lmasa, bot hech kimni bloklamaydi |
 
 ---
 
