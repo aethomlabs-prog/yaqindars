@@ -78,7 +78,16 @@ def normalize_phone(raw: str):
 # ---------------- Mini App: markazni ro'yxatdan o'tkazish ----------------
 import json  # noqa: E402
 
-TARIFF_PRICES = {"oddiy": 75_000, "vip": 150_000}
+TARIFF_PRICES = {"oddiy": 75_000, "vip": 150_000}  # tarif nomlari (oddiy narxi turiga bog'liq — tariff_price)
+KIND_PRICES = {"center": 75_000, "tutor": 45_000}  # Oddiy tarif: o'quv markazi / repetitor
+TRIAL_DAYS = 15
+
+
+def tariff_price(kind, tariff) -> int:
+    """webapp/config.ts tariffPrice bilan bir xil: VIP 150 000, aks holda markaz 75 000 / repetitor 45 000."""
+    if tariff == "vip":
+        return TARIFF_PRICES["vip"]
+    return KIND_PRICES["tutor" if kind == "tutor" else "center"]
 _TIME_RE = re.compile(r"(\d{2}):(\d{2})–(\d{2}):(\d{2})")
 
 

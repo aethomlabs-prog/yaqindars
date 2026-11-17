@@ -2,15 +2,13 @@
 import type { Day, Group, LatLng, Teacher } from "../lib/types";
 
 export type Tariff = "oddiy" | "vip";
-export const TARIFFS: Record<Tariff, { title: string; price: number; perks: string[] }> = {
+export const TARIFFS: Record<Tariff, { title: string; perks: string[] }> = {
   oddiy: {
     title: "Oddiy",
-    price: 75000,
     perks: ["Xaritada ko‘rinasiz", "Arizalar Telegram’ga keladi", "Bo‘sh joy va narxni bir bosishda yangilash"]
   },
   vip: {
     title: "VIP",
-    price: 150000,
     perks: ["Oddiy tarifdagi hammasi", "Ro‘yxatda birinchi o‘rinda", "Xaritada oltin belgi", "«Tavsiya etilgan» bo‘limida"]
   }
 };

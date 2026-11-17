@@ -120,13 +120,13 @@ def is_claimed(center: dict) -> bool:
 
 
 # ---------------- Obuna (to'lov) muddati ----------------
-TRIAL = timedelta(days=30)
+TRIAL = timedelta(days=15)  # bepul sinov davri
 REMIND_DAYS = (3, 1)
 HIDE_AFTER = timedelta(days=7)
 
 
 def billing_until(center: dict) -> datetime | None:
-    """Sinov (egallangan/yaratilgan sanadan 30 kun) yoki to'langan muddat — qaysi biri keyin bo'lsa."""
+    """Sinov (egallangan/yaratilgan sanadan 15 kun) yoki to'langan muddat — qaysi biri keyin bo'lsa."""
     start = center.get("claimedAt") or center.get("createdAt")
     trial_end = start + TRIAL if isinstance(start, datetime) else None
     paid = center.get("paidUntil") if isinstance(center.get("paidUntil"), datetime) else None

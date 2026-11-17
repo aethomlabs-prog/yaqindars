@@ -1,6 +1,6 @@
 /* Obuna holati: bepul sinov oyi → to‘langan muddat → muddati o‘tgan.
  * To‘lov hozircha admin orqali (Telegram). Admin «To‘lov qabul qilindi» bosganda paidUntil uzayadi. */
-import { TARIFF_PRICE, TRIAL_DAYS } from "../../config";
+import { TRIAL_DAYS, tariffPrice } from "../../config";
 
 const DAY = 86400000;
 
@@ -17,11 +17,11 @@ export interface Billing {
 }
 
 export function billingOf(
-  c: { approved: boolean; vip: boolean; tariff: "oddiy" | "vip" | null; createdMs: number; paidUntilMs: number | null; claimedMs?: number | null },
+  c: { approved: boolean; vip: boolean; kind?: "center" | "tutor"; tariff: "oddiy" | "vip" | null; createdMs: number; paidUntilMs: number | null; claimedMs?: number | null },
   now = Date.now()
 ): Billing {
   const tariff = c.vip || c.tariff === "vip" ? "vip" : "oddiy";
-  const price = TARIFF_PRICE[tariff];
+  const price = tariffPrice(c.kind ?? "center", tariff);
   // Admin qo‘shgan markaz: bepul oy egasi egallagan kundan boshlanadi
   const trialEnd = (c.claimedMs || c.createdMs || now) + TRIAL_DAYS * DAY;
   const until = Math.max(trialEnd, c.paidUntilMs ?? 0);

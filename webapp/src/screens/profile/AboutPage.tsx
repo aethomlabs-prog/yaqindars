@@ -24,7 +24,7 @@ export function AboutPage() {
         <Row icon={<MessageCircle size={17} />} iconBg="#1E6FD9" title="Markazlar javobi Telegram’da keladi" />
       </Section>
 
-      <Section header="Markazlar uchun" footer="1-oy bepul, keyin Oddiy — 75 000 so‘m/oy, VIP — 150 000 so‘m/oy.">
+      <Section header="Markazlar uchun" footer="15 kun bepul, keyin oyiga: repetitor — 45 000 so‘m, o‘quv markazi — 75 000 so‘m, VIP — 150 000 so‘m.">
         <Row
           icon={<Store size={17} />}
           iconBg="#13804F"

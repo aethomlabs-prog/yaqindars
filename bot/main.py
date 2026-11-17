@@ -166,6 +166,8 @@ from logic import (  # noqa: E402
 from poster import make_poster  # noqa: E402
 from parsers import (  # noqa: E402
     TARIFF_PRICES,
+    TRIAL_DAYS,
+    tariff_price,
     AI_SYSTEM,
     TASHKENT,
     RegError,
@@ -294,7 +296,7 @@ def panel(cid: str, data: dict):
     tariff = data.get("tariff")
     lines = [f"🏫 <b>{escape(data.get('name', ''))}</b>{vip}", f"Holat: {status}"]
     if tariff in TARIFF_PRICES:
-        lines.append(f"Tarif: {'VIP' if tariff == 'vip' else 'Oddiy'} — {fmt_sum(TARIFF_PRICES[tariff])}/oy")
+        lines.append(f"Tarif: {'VIP' if tariff == 'vip' else 'Oddiy'} — {fmt_sum(tariff_price(data.get('kind'), tariff))}/oy")
     if data.get("teachers"):
         lines.append(f"O‘qituvchilar: {len(data['teachers'])} ta")
     lines.append("")
@@ -643,8 +645,9 @@ def register_keyboard(text: str = "📝 Markazni qo‘shish") -> ReplyKeyboardMa
 
 
 TARIFF_TEXT = (
-    "💼 <b>Tariflar</b> (birinchi oy — bepul):\n"
-    f"• <b>Oddiy</b> — {fmt_sum(TARIFF_PRICES['oddiy'])}/oy: xaritada ko‘rinish, arizalar botga keladi\n"
+    f"💼 <b>Tariflar</b> (birinchi {TRIAL_DAYS} kun — bepul):\n"
+    f"• <b>Oddiy</b> — repetitor {fmt_sum(tariff_price('tutor', 'oddiy'))}, o‘quv markazi {fmt_sum(tariff_price('center', 'oddiy'))}/oy: "
+    "xaritada ko‘rinish, arizalar botga keladi\n"
     f"• <b>VIP</b> — {fmt_sum(TARIFF_PRICES['vip'])}/oy: ro‘yxatda birinchi, xaritada oltin belgi, «Tavsiya etilgan» bo‘limida"
 )
 
@@ -717,7 +720,7 @@ async def on_register_app(message: Message, state: FSMContext, bot: Bot):
     tariff_name = "VIP" if data["tariff"] == "vip" else "Oddiy"
     await message.answer(
         f"✅ <b>{escape(data['name'])}</b> qabul qilindi!\n"
-        f"Tarif: {tariff_name} — birinchi oy bepul.\n\n"
+        f"Tarif: {tariff_name} — {fmt_sum(tariff_price(data.get('kind'), data['tariff']))}/oy, birinchi {TRIAL_DAYS} kun bepul.\n\n"
         "Admin tekshirgach (odatda 1 kun ichida) markazingiz xaritada ko‘rinadi. "
         "Bo‘sh joylar va narxlarni quyidagi panelda boshqarasiz:",
         reply_markup=main_menu(),
@@ -1382,7 +1385,7 @@ async def admin_decide(call: CallbackQuery, bot: Bot):
         vip_on = as_dict(snap).get("tariff") == "vip"
         upd = {"approved": True, "updatedAt": firestore.SERVER_TIMESTAMP}
         if vip_on:
-            upd["vip"] = True  # VIP tarif: birinchi oy bepul
+            upd["vip"] = True  # VIP tarif: birinchi 15 kun bepul
         await asyncio.to_thread(CENTERS.document(cid).update, upd)
         mark = "✅ Tasdiqlandi" + (" (⭐ VIP)" if vip_on else "")
         msg = "🎉 Markazingiz tasdiqlandi va xaritada ko‘rinmoqda!\nGuruhlar va bo‘sh joylarni boshqarish: /markaz"
@@ -1839,7 +1842,7 @@ async def process_web_approval(bot: Bot, ref):
         return
     owner, name = c.get("ownerTgId"), escape(str(c.get("name", "")))
     if st == "approved":
-        vip = " ⭐ VIP tarif yoqildi (birinchi oy bepul)." if c.get("vip") else ""
+        vip = f" ⭐ VIP tarif yoqildi (birinchi {TRIAL_DAYS} kun bepul)." if c.get("vip") else ""
         text = f"🎉 <b>{name}</b> tasdiqlandi va xaritada ko‘rinmoqda!{vip}\nGuruhlar va bo‘sh joylarni boshqarish: /markaz"
     else:
         text = f"Afsuski, <b>{name}</b> ro‘yxatdan o‘tkazilmadi. Savollar bo‘lsa — «💬 Admin bilan bog‘lanish»."
@@ -1995,7 +1998,7 @@ def owner_kb() -> InlineKeyboardMarkup:
 
 def pay_url(c: dict, cid: str) -> str:
     tariff = "VIP" if c.get("vip") or c.get("tariff") == "vip" else "Oddiy"
-    price = TARIFF_PRICES["vip" if tariff == "VIP" else "oddiy"]
+    price = tariff_price(c.get("kind"), "vip" if tariff == "VIP" else "oddiy")
     text = f"Assalomu alaykum! YaqinDars to‘lovi.\nMarkaz: {clean_name(c.get('name'))}\nTarif: {tariff} — {fmt_sum(price)}/oy\nMarkaz ID: {cid}"
     return f"https://t.me/{ADMIN_TG}?text={quote(text)}"
 
@@ -2141,7 +2144,7 @@ def attach_patch(center: dict, tg_id: int, username, via: str) -> dict:
         "ownerTgId": tg_id,
         "ownerUsername": username,
         "claimed": True,
-        "claimedAt": firestore.SERVER_TIMESTAMP,  # bepul 30 kun shundan hisoblanadi
+        "claimedAt": firestore.SERVER_TIMESTAMP,  # bepul 15 kun shundan hisoblanadi
         "claimedVia": via,
         "tariff": center.get("tariff") or "oddiy",
         "updatedAt": firestore.SERVER_TIMESTAMP,
@@ -2172,7 +2175,7 @@ async def send_claim_code(message: Message, cid: str, admin_id: int):
     await message.answer(
         f"🔑 <b>{escape(clean_name(c.get('name')))}</b> uchun kod: <code>{code}</code>\n"
         f"7 kun, bir marta amal qiladi.\n\nEgasiga yuboring:\n"
-        f"«@{BOT_USERNAME} botiga <code>/claim {code}</code> deb yozing — markaz kabinetingizga ulanadi, 1 oy bepul.»"
+        f"«@{BOT_USERNAME} botiga <code>/claim {code}</code> deb yozing — markaz kabinetingizga ulanadi, {TRIAL_DAYS} kun bepul.»"
     )
 
 
@@ -2221,7 +2224,7 @@ async def claim_cmd(message: Message, command: CommandObject, bot: Bot):
     cid, c = res
     name = escape(clean_name(c.get("name")))
     await message.answer(
-        f"✅ <b>{name}</b> endi sizniki!\n🎁 30 kun bepul. Bo‘sh joylar, guruhlar va arizalarni kabinetda boshqaring.\n"
+        f"✅ <b>{name}</b> endi sizniki!\n🎁 {TRIAL_DAYS} kun bepul. Bo‘sh joylar, guruhlar va arizalarni kabinetda boshqaring.\n"
         "Markaz QR kodi: /qr",
         reply_markup=owner_kb(),
     )
@@ -2293,7 +2296,7 @@ async def claim_request_decide(call: CallbackQuery, bot: Bot):
     tg_id = req.get("tgId")
     if approve:
         try:
-            await bot.send_message(tg_id, f"✅ <b>{name}</b> sizga biriktirildi!\n🎁 30 kun bepul. Ma’lumotlarni kabinetda yangilang — "
+            await bot.send_message(tg_id, f"✅ <b>{name}</b> sizga biriktirildi!\n🎁 {TRIAL_DAYS} kun bepul. Ma’lumotlarni kabinetda yangilang — "
                                           "«Ma’lumot tasdiqlanmagan» belgisi o‘rniga markazingiz to‘liq ko‘rinadi.\nQR kod: /qr",
                                    reply_markup=owner_kb())
         except Exception as e:  # noqa: BLE001

@@ -185,7 +185,7 @@ export function createDemoBackend(): Backend {
     },
     async markPaid(c, months) {
       const x = adminCenters.find((y) => y.id === c.id);
-      const until = Math.max(Date.now(), c.paidUntilMs ?? 0, c.createdMs + 30 * DAYMS) + months * 30 * DAYMS;
+      const until = Math.max(Date.now(), c.paidUntilMs ?? 0, c.createdMs + 15 * DAYMS) + months * 30 * DAYMS;
       if (x) x.paidUntilMs = until;
       return until;
     },

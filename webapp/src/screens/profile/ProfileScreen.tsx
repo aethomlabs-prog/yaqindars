@@ -97,7 +97,7 @@ export function ProfileScreen() {
 
       <Section>
         {BOT_USERNAME && (
-          <Row icon={<Store size={17} />} iconBg="#13804F" title="Markazingizni qo‘shing" subtitle="Bot orqali, 1-oy bepul" chevron onClick={() => openTelegramLink(`https://t.me/${BOT_USERNAME}?start=markaz`)} />
+          <Row icon={<Store size={17} />} iconBg="#13804F" title="Markazingizni qo‘shing" subtitle="Bot orqali, 15 kun bepul" chevron onClick={() => openTelegramLink(`https://t.me/${BOT_USERNAME}?start=markaz`)} />
         )}
         <Row icon={<Info size={17} />} iconBg="#8E8E93" title="Ilova haqida" chevron onClick={() => push({ name: "about" })} />
         <Row icon={<Shield size={17} />} iconBg="#34C759" title="Maxfiylik siyosati" chevron onClick={() => openLink(new URL("privacy", location.href.split("?")[0]).toString())} />

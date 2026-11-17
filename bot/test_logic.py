@@ -181,7 +181,7 @@ class BillingTest(unittest.TestCase):
 
     def test_until_trial_from_claim(self):
         c = self.center(createdAt=self.NOW - timedelta(days=100), claimedAt=self.NOW - timedelta(days=2))
-        self.assertEqual(billing_until(c), self.NOW + timedelta(days=28))  # egallangandan 30 kun bepul
+        self.assertEqual(billing_until(c), self.NOW + timedelta(days=13))  # egallangandan 15 kun bepul
         c2 = self.center(paidUntil=self.NOW + timedelta(days=60))
         self.assertEqual(billing_until(c2), self.NOW + timedelta(days=60))
 
@@ -339,6 +339,23 @@ class InlineTest(unittest.TestCase):
         self.assertEqual([c["id"] for c in inline_search(self.CS, "")], ["b", "c"])  # bo'sh so'rov: faqat bo'sh joyi borlar, VIP oldin
         self.assertEqual([c["id"] for c in inline_search(self.CS, "c_a")], ["a"])
         self.assertEqual(inline_search(self.CS, "fizika"), [])
+
+
+
+class PriceTest(unittest.TestCase):
+    def test_kind_prices(self):
+        from parsers import TRIAL_DAYS, tariff_price
+        self.assertEqual(tariff_price("tutor", "oddiy"), 45_000)
+        self.assertEqual(tariff_price("center", "oddiy"), 75_000)
+        self.assertEqual(tariff_price(None, None), 75_000)
+        self.assertEqual(tariff_price("tutor", "vip"), 150_000)
+        self.assertEqual(TRIAL_DAYS, 15)
+
+    def test_trial_15_days(self):
+        now = datetime(2026, 11, 16, tzinfo=UTC)
+        c = {"approved": True, "ownerTgId": 1, "claimed": True, "createdAt": now - timedelta(days=13)}
+        self.assertEqual(billing_action(c, now), None)  # 2 kun qoldi
+        self.assertEqual(billing_action(c, now - timedelta(hours=12)), ("remind", 3))
 
 
 if __name__ == "__main__":

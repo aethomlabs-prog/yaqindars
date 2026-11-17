@@ -45,7 +45,7 @@ yaqindars/
 - `/vip MARKAZ_ID` — VIP ni yoqish/o‘chirish
 - `/stat` — markazlar, tasdiqlanganlar, VIP va arizalar soni
 
-**Biznes-model:** ota-onalar uchun bepul; markazlar uchun 1-oy bepul, keyin Oddiy — 75 000 so‘m/oy,
+**Biznes-model:** ota-onalar uchun bepul; markazlar uchun 15 kun bepul, keyin Oddiy — repetitor 45 000, o‘quv markazi 75 000 so‘m/oy,
 VIP — 150 000 so‘m/oy. To‘lov hozircha qo‘lda (admin `/vip` bilan yoqadi), avtomatik to‘lov — keyingi bosqichda.
 
 ---
@@ -202,7 +202,7 @@ Kunlar: `Du Se Ch Pa Ju Sh Ya`. Fanlar: Ingliz tili, Matematika, IT, Rus tili, K
 
 - **Spamdan himoya:** arizani to‘g‘ridan-to‘g‘ri Firestore’ga emas, Telegram `initData` imzosini tekshiradigan
   Cloud Function orqali qabul qilish; keyin `applications` ga create qoidasini yopish.
-- **To‘lov:** Payme / Click orqali obuna (Oddiy 75 000, VIP 150 000 so‘m), muddati tugaganda markazni yashirish.
+- **To‘lov:** Payme / Click orqali obuna (Oddiy: repetitor 45 000 / markaz 75 000, VIP 150 000 so‘m), muddati tugaganda markazni yashirish.
 - **Reyting:** sinov darsidan 2–3 kun keyin bot ota-onadan baho so‘raydi → `rating` hisoblanadi.
 - **Xarita plitkalari:** OpenStreetMap’ning bepul serveri katta yuklama uchun emas — foydalanuvchilar
   ko‘paysa MapTiler / Stadia / Yandex plitkalariga o‘tish (`app.js` dagi `L.tileLayer` manzili).
@@ -335,7 +335,7 @@ Har push’da Railway/Render botni o‘zi qayta joylaydi. Xatolar loglarda va Fi
   yoki admin panelda «Markaz qo‘shish». Markaz `source: "admin"`, `claimed: false` bilan saqlanadi va xaritada
   «Ma’lumot tasdiqlanmagan» belgisi bilan chiqadi. Bunday markazga ariza kelsa, bot uni markaz telefoni bilan **adminga** yuboradi.
 - **Egallash.** Markaz sahifasida «Bu mening markazim» → adminga so‘rov (✅/❌) → tasdiqlansa `ownerTgId` biriktiriladi,
-  `claimed: true`, 30 kun bepul (`claimedAt` dan). Yoki admin `/claimcode <markazId>` → 6 belgili kod (7 kun, bir martalik) →
+  `claimed: true`, 15 kun bepul (`claimedAt` dan). Yoki admin `/claimcode <markazId>` → 6 belgili kod (7 kun, bir martalik) →
   egasi botga `/claim KOD`.
 - **QR.** Markaz havolasi: `https://t.me/yaqindars_bot?startapp=c_<markazId>`. Kabinet → «Mening QR’im» → bot
   1200×1500 PNG poster yuboradi (brend rangi `#0F3D7A`, markaz nomi, @yaqindars_bot); botda `/qr` ham ishlaydi.

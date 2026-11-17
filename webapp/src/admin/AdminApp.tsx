@@ -49,7 +49,6 @@ const tDate = (ms: number) => new Date(ms + 5 * 3600000).toISOString().slice(0, 
 const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : "—");
 type App = Application & { tgUsername: string | null };
 const DAY = 86400000;
-const PRICE = { oddiy: 75000, vip: 150000 } as const;
 const STATUS_META: Record<AppStatus, { label: string; color: string; icon: ReactNode }> = {
   new: { label: "Yangi", color: "var(--st-warning)", icon: <Hourglass size={16} /> },
   seen: { label: "Ko‘rildi", color: "var(--viz-1)", icon: <Eye size={16} /> },
@@ -271,7 +270,7 @@ export default function AdminApp() {
     const approved = cs.filter((c) => c.approved);
     const pending = cs.filter((c) => !c.approved);
     const vip = approved.filter((c) => c.vip);
-    const mrr = approved.filter((c) => !!c.ownerTgId).reduce((s, c) => s + (c.vip || c.tariff === "vip" ? PRICE.vip : PRICE.oddiy), 0);
+    const mrr = approved.filter((c) => !!c.ownerTgId).reduce((s, c) => s + billingOf(c).price, 0);
     const overdue = approved.filter((c) => !!c.ownerTgId && billingOf(c).state === "overdue");
     const ownerless = cs.filter((c) => !c.ownerTgId).length;
     const by = (st: AppStatus) => periodApps.filter((a) => a.status === st).length;
@@ -563,7 +562,7 @@ export default function AdminApp() {
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
                 <Kpi icon={<Building2 size={15} />} label="Markazlar" value={stats.approved} sub={`jami ${stats.total} · VIP ${stats.vip}`} />
                 <Kpi icon={<Hourglass size={15} />} label="Tasdiq kutmoqda" value={stats.pending.length} tone="var(--st-warning)" alert={stats.pending.length > 0} sub={stats.pending.length ? "pastda navbat" : "navbat bo‘sh"} />
-                <Kpi icon={<Wallet size={15} />} label="Oylik daromad (taxm.)" value={fmtSum(stats.mrr).replace(" so‘m", "")} sub="so‘m · birinchi oy bepul hisobga olinmagan" tone="var(--st-good)" />
+                <Kpi icon={<Wallet size={15} />} label="Oylik daromad (taxm.)" value={fmtSum(stats.mrr).replace(" so‘m", "")} sub="so‘m · 15 kunlik bepul davr hisobga olinmagan" tone="var(--st-good)" />
                 <Kpi icon={<Banknote size={15} />} label="To‘lov muddati o‘tgan" value={stats.overdue.length} tone="var(--st-critical)" alert={stats.overdue.length > 0} sub={stats.overdue.length ? "Markazlar → «Muddati o‘tgan»" : "hammasi to‘langan"} />
                 <Kpi icon={<ClipboardList size={15} />} label={`Arizalar (${days} kun)`} value={periodApps.length} sub={`bugun ${stats.today}`} />
                 <Kpi icon={<CheckCircle2 size={15} />} label="Qabul darajasi" value={stats.rate === null ? "—" : `${stats.rate}%`} sub="qabul / (qabul + rad)" tone="var(--st-good)" />

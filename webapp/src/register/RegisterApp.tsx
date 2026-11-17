@@ -13,6 +13,7 @@ import { SUBJECTS } from "../lib/match";
 import { haptic, inTelegram, tg, tgUser, useBackHandler, useMainButton } from "../lib/telegram";
 import { DAYS, type Day, type Group, type Teacher } from "../lib/types";
 import { useApp } from "../store/app";
+import { PRICES, TRIAL_DAYS, tariffPrice } from "../../config";
 import { buildPayload, byteSize, DAY_FULL, EMPTY_DRAFT, MAX_BYTES, TARIFFS, type Draft, type Tariff } from "./payload";
 
 const MapPicker = lazy(() => import("../screens/map/MapPicker"));
@@ -427,7 +428,7 @@ export default function RegisterApp() {
           >
             {step === "tariff" && (
               <div className="space-y-4">
-                <p className="px-1 text-subhead text-ink2">Birinchi oy — bepul. To‘lov admin tasdiqlagandan keyin, ikkinchi oydan boshlanadi.</p>
+                <p className="px-1 text-subhead text-ink2">Birinchi {TRIAL_DAYS} kun — bepul. To‘lov shundan keyin boshlanadi. Repetitor — {fmtSum(PRICES.tutor)}, o‘quv markazi — {fmtSum(PRICES.center)} oyiga.</p>
                 <Segmented
                   label="Turi"
                   value={d.kind}
@@ -456,7 +457,7 @@ export default function RegisterApp() {
                               {k === "vip" && <span className="rounded-full bg-gold-soft px-2 py-0.5 text-caption font-semibold text-gold-text">Ko‘proq o‘quvchi</span>}
                             </div>
                             <div className="tnum mt-1 text-headline">
-                              {fmtSum(t.price)}
+                              {fmtSum(tariffPrice(d.kind, k))}
                               <span className="font-normal text-ink2"> / oy</span>
                             </div>
                           </div>
@@ -629,7 +630,7 @@ export default function RegisterApp() {
                     k: 0,
                     icon: <GraduationCap size={18} />,
                     title: "Tarif",
-                    body: d.tariff ? `${TARIFFS[d.tariff].title} — ${fmtSum(TARIFFS[d.tariff].price)}/oy (1-oy bepul)` : "—"
+                    body: d.tariff ? `${TARIFFS[d.tariff].title} — ${fmtSum(tariffPrice(d.kind, d.tariff))}/oy (${TRIAL_DAYS} kun bepul)` : "—"
                   },
                   {
                     k: 1,

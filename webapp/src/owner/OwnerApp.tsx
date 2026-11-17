@@ -2,7 +2,7 @@
  * Markazlarim → statistika, arizalar (Ko‘rdim / Qabul / Rad), guruhlar (bo‘sh joy ➖/➕, narx). */
 import { EmptyState, SkeletonList } from "../components/motion";
 import { AlertTriangle, CalendarClock, Check, ClipboardList, Copy, Crown, EyeOff, Eye, Gift, Hourglass, Map, Minus, Phone, Plus, QrCode, Send, Share, Users, Wallet, X } from "lucide-react";
-import { ADMIN_PHONE, ADMIN_TELEGRAM, TARIFF_PRICE } from "../../config";
+import { ADMIN_PHONE, ADMIN_TELEGRAM, PRICES, TRIAL_DAYS } from "../../config";
 import { billingOf } from "../lib/billing";
 import { useEffect, useMemo, useState } from "react";
 import { LogoMark, SubjectIcon } from "../components/brand";
@@ -139,11 +139,11 @@ function AccountCard({ c }: { c: OwnerCenter }) {
 Markaz: ${name}
 Tarif: ${b.tariff === "vip" ? "VIP" : "Oddiy"} — ${fmtSum(b.price)}/oy
 Markaz ID: ${c.id}`);
-  const upgrade = () => ask(`Assalomu alaykum! «${name}» ni VIP tarifga (${fmtSum(TARIFF_PRICE.vip)}/oy) o‘tkazmoqchiman.
+  const upgrade = () => ask(`Assalomu alaykum! «${name}» ni VIP tarifga (${fmtSum(PRICES.vip)}/oy) o‘tkazmoqchiman.
 Markaz ID: ${c.id}`);
 
   const S = {
-    pending: { icon: <Hourglass size={16} />, cls: "bg-gold-soft text-gold-text", title: "Admin tekshiruvida", text: `Tasdiqlangach ${30} kun bepul ishlaydi.` },
+    pending: { icon: <Hourglass size={16} />, cls: "bg-gold-soft text-gold-text", title: "Admin tekshiruvida", text: `Tasdiqlangach ${TRIAL_DAYS} kun bepul ishlaydi.` },
     trial: { icon: <Gift size={16} />, cls: "bg-green-soft text-green-text", title: `Bepul sinov oyi — ${b.days} kun qoldi`, text: `Birinchi to‘lov: ${fmtDate(b.until)} gacha` },
     active: { icon: <Check size={16} />, cls: "bg-green-soft text-green-text", title: "Faol", text: `${fmtDate(b.until)} gacha to‘langan (${b.days} kun)` },
     overdue: c.hidden
@@ -346,7 +346,7 @@ export default function OwnerApp() {
       ) : centers === null ? (
         <SkeletonList count={3} />
       ) : !centers.length ? (
-        <EmptyState kind="applications" title="Markazingiz hali yo‘q" text="Sizda hali markaz yo‘q. Botda /markaz yozing va «📝 Markazni qo‘shish» orqali 3–5 daqiqada ro‘yxatdan o‘ting — birinchi oy bepul." action={{ label: "Botga qaytish", onClick: () => (tg?.close ? tg.close() : goMainApp()) }} />
+        <EmptyState kind="applications" title="Markazingiz hali yo‘q" text="Sizda hali markaz yo‘q. Botda /markaz yozing va «📝 Markazni qo‘shish» orqali 3–5 daqiqada ro‘yxatdan o‘ting — 15 kun bepul." action={{ label: "Botga qaytish", onClick: () => (tg?.close ? tg.close() : goMainApp()) }} />
       ) : (
         <div className="pb-10">
           {centers.length > 1 && (
@@ -372,7 +372,7 @@ export default function OwnerApp() {
                 </div>
                 {center.tariff && (
                   <div className="tnum mt-2 text-footnote text-ink2">
-                    Tarif: {center.tariff === "vip" ? "VIP — 150 000" : "Oddiy — 75 000"} so‘m/oy
+                    Tarif: {center.tariff === "vip" ? "VIP" : "Oddiy"} — {fmtSum(billingOf(center).price)}/oy
                   </div>
                 )}
               </div>

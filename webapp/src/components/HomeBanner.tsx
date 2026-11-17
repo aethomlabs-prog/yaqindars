@@ -17,7 +17,7 @@ type Slide = {
 const SLIDES: Slide[] = [
   { id: "seats", title: "Hozir bo‘sh joy bor", text: "Yaqin atrofdagi guruhlar — jonli", cta: "Xaritani ochish" },
   { id: "trial", title: "Bepul sinov darsi", text: "Bir tugma bilan yoziling", cta: "Kurs tanlash" },
-  { id: "owner", title: "Markaz egasimisiz?", text: "Birinchi oy bepul · VIP 150 000", cta: "Ulanish" },
+  { id: "owner", title: "Markaz egasimisiz?", text: "15 kun bepul · repetitor 45 000, markaz 75 000", cta: "Ulanish" },
 ];
 
 const PIN = "M50 4C26 4 8 22 8 46c0 30 42 70 42 70s42-40 42-70C92 22 74 4 50 4Z";

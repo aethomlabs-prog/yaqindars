@@ -385,7 +385,7 @@ export function CenterPage({ centerId }: { centerId: string }) {
         {!c.claimed && (
           <div className="mx-4 mt-7 rounded-card bg-card p-4 text-center shadow-card">
             <p className="text-headline">Bu sizning markazingizmi?</p>
-            <p className="mt-1 text-footnote text-ink2">Egallang: bo‘sh joy va narxlarni o‘zingiz yangilaysiz, arizalar to‘g‘ridan-to‘g‘ri sizga keladi. Birinchi oy bepul.</p>
+            <p className="mt-1 text-footnote text-ink2">Egallang: bo‘sh joy va narxlarni o‘zingiz yangilaysiz, arizalar to‘g‘ridan-to‘g‘ri sizga keladi. 15 kun bepul.</p>
             <Button kind="tinted" size="md" className="mt-3 w-full" disabled={claimState !== "idle"} loading={claimState === "busy"} onClick={claim}>
               <KeyRound size={17} aria-hidden /> {claimState === "sent" ? "So‘rov yuborildi" : "Bu mening markazim"}
             </Button>
