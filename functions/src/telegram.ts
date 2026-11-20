@@ -40,7 +40,7 @@ export function downloadButtons(cfg: BotConfig): Button[][] {
   if (cfg.androidUrl) rows.push([{ text: "📲 Android — Google Play", url: cfg.androidUrl }]);
   if (cfg.iosUrl) rows.push([{ text: "🍏 iPhone — App Store", url: cfg.iosUrl }]);
   rows.push([{ text: "🌐 yaqindars.uz", url: CONTACT.site }]);
-  rows.push([{ text: "📢 Kanalimiz: @yaqindars", url: `https://t.me/${CONTACT.channel}` }]);
+  rows.push([{ text: `📢 Kanalimiz: @${CONTACT.channel}`, url: `https://t.me/${CONTACT.channel}` }]);
   return rows;
 }
 

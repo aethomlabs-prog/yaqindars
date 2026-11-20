@@ -18,7 +18,7 @@ Tartib bilan bajaring — ☐ belgisini ☑ ga almashtirib boring.
 | ☐ G | **UptimeRobot** | README → «Monitoring: UptimeRobot» | Bot to‘xtasa 5 daqiqada xabar |
 | ☐ H | **Kompyuterda bot ishlatsangiz** | `cd bot` → `venv\Scriptsctivate` → `pip install -U -r requirements.txt` | QR poster uchun `qrcode` va `Pillow` qo‘shildi |
 | ☐ I | **Telefonda sinash** | README → ro‘yxatning 16–34 qadamlari | Yangi funksiyalar |
-| ☐ J | **Bot @yaqindars kanalida admin bo‘lib qolsin** | Kanal → Administratorlar | Obunani tekshirish uchun shart (hozir admin — tekshirildi). Admin bo‘lmasa, bot hech kimni bloklamaydi |
+| ☐ J | **Bot @yaqindars_uz kanalida admin bo‘lsin** | Kanal → Administratorlar | Obunani tekshirish uchun shart. Admin bo‘lmasa, bot hech kimni bloklamaydi |
 
 ---
 

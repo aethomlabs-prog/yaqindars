@@ -142,7 +142,7 @@ describe("Telegram webhook", () => {
     expect(r).toBe("welcome");
     const body = JSON.stringify(sent[0].body);
     expect(body).toContain("play.google.com");
-    expect(body).toContain("t.me/yaqindars");
+    expect(body).toContain("t.me/yaqindars_uz");
   });
 
   test("guruh chatlari e’tiborsiz qoldiriladi", async () => {

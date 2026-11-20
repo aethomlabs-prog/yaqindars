@@ -422,9 +422,9 @@ def welcome_kb() -> InlineKeyboardMarkup:
     ])
 
 
-# ---------------- Kanalga majburiy obuna (t.me/yaqindars) ----------------
+# ---------------- Kanalga majburiy obuna (t.me/yaqindars_uz) ----------------
 # Bot kanalda ADMIN bo'lishi shart (a'zolikni tekshirish uchun). Tekshirib bo'lmasa — hech kimni bloklamaymiz.
-REQUIRED_CHANNEL = os.getenv("REQUIRED_CHANNEL", "yaqindars").strip().lstrip("@")
+REQUIRED_CHANNEL = os.getenv("REQUIRED_CHANNEL", "yaqindars_uz").strip().lstrip("@")
 SUB_OK_STATUSES = {"member", "administrator", "creator"}
 _sub_cache: dict[int, float] = {}  # tasdiqlangan obunachilar: user_id -> vaqt (10 daqiqa eslab qolamiz)
 _sub_warned = False

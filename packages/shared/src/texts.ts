@@ -12,7 +12,7 @@ export const BRAND = {
 export const CONTACT = {
   adminTelegram: "nozimjons",
   adminPhone: "+998 90 389 21 26",
-  channel: "yaqindars",
+  channel: "yaqindars_uz",
   bot: "yaqindars_bot",
   site: "https://yaqindars.uz"
 } as const;
