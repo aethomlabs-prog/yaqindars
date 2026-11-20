@@ -453,17 +453,43 @@ async def require_sub(message: Message, bot: Bot, then: str = "start") -> bool:
     """Obuna bo'lmagan bo'lsa — kanal tugmasi va «Obuna bo'ldim» ni ko'rsatadi, False qaytaradi."""
     if await is_subscribed(bot, message.from_user.id):
         return True
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [ibtn("📢 Kanalga obuna bo‘lish", f"https://t.me/{REQUIRED_CHANNEL}", "primary")],
-        [InlineKeyboardButton(text="✅ Obuna bo‘ldim", callback_data=f"sub:{then}", style="success")],
-    ])
-    await message.answer(
+    done_btn = [InlineKeyboardButton(text="✅ Obuna bo‘ldim", callback_data=f"sub:{then}", style="success")]
+    text = (
         "👋 Assalomu alaykum!\n\nBotdan foydalanish uchun avval rasmiy kanalimizga obuna bo‘ling — "
         "u yerda yangi markazlar, bo‘sh joylar va chegirmalar haqida e’lon qilamiz.\n\n"
-        "Obuna bo‘lgach, <b>«✅ Obuna bo‘ldim»</b> ni bosing.",
-        reply_markup=kb,
+        "Obuna bo‘lgach, <b>«✅ Obuna bo‘ldim»</b> ni bosing."
     )
+    # Telegram ba'zan kanal havolasini tugma sifatida rad etadi (BUTTON_URL_INVALID) — foydalanuvchi
+    # javobsiz qolmasin: avval t.me/<kanal>, keyin taklif havolasi, oxiri — havola matnda.
+    for link in (f"https://t.me/{REQUIRED_CHANNEL}", await channel_invite_link(bot)):
+        if not link:
+            continue
+        try:
+            await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [ibtn("📢 Kanalga obuna bo‘lish", link, "primary")], done_btn]))
+            return False
+        except TelegramBadRequest as e:
+            if "BUTTON_URL" not in str(e):
+                raise
+            log.warning("Kanal tugmasi rad etildi (%s): %s", link, e)
+    await message.answer(f"{text}\n\n📢 Kanal: https://t.me/{REQUIRED_CHANNEL}", reply_markup=InlineKeyboardMarkup(inline_keyboard=[done_btn]))
     return False
+
+
+_invite_link: str | None = None
+
+
+async def channel_invite_link(bot: Bot) -> str | None:
+    """Kanalning taklif havolasi (zaxira uchun; bot kanalda admin bo'lishi kerak). Bir marta olinadi."""
+    global _invite_link
+    if _invite_link is None:
+        try:
+            chat = await bot.get_chat(f"@{REQUIRED_CHANNEL}")
+            _invite_link = chat.invite_link or (await bot.create_chat_invite_link(f"@{REQUIRED_CHANNEL}", name="YaqinDars bot")).invite_link
+        except Exception as e:  # noqa: BLE001
+            log.info("Taklif havolasini olib bo'lmadi: %s", e)
+            _invite_link = ""
+    return _invite_link or None
 
 
 @router.callback_query(F.data.startswith("sub:"))
@@ -2700,7 +2726,7 @@ async def inline_centers() -> list[dict]:
     return items
 
 
-def inline_result(c: dict) -> InlineQueryResultArticle:
+def inline_result(c: dict, mini_app: bool = True) -> InlineQueryResultArticle:
     groups = c["groups"]
     free = sum(int(g.get("freeSeats") or 0) for g in groups)
     prices = [g.get("price") or 0 for g in groups if (g.get("price") or 0) > 0]
@@ -2717,7 +2743,7 @@ def inline_result(c: dict) -> InlineQueryResultArticle:
         description=f"{subjects or '—'}\n{seats} · {price}",
         thumbnail_url=thumb,
         input_message_content=InputTextMessageContent(message_text=text, parse_mode=ParseMode.HTML),
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📱 Ochish", url=center_link(c["id"]))]]),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📱 Ochish", url=center_link(c["id"]) if mini_app else f"https://t.me/{BOT_USERNAME}?start=c_{c['id']}")]]),
     )
 
 
@@ -2725,7 +2751,13 @@ def inline_result(c: dict) -> InlineQueryResultArticle:
 async def on_inline(query: InlineQuery):
     try:
         found = inline_search(await inline_centers(), query.query, 20)
-        await query.answer([inline_result(c) for c in found], cache_time=60, is_personal=False)
+        try:
+            await query.answer([inline_result(c) for c in found], cache_time=60, is_personal=False)
+        except TelegramBadRequest as e:
+            # BotFather'da Mini App sozlanmagan bo'lsa startapp havolasi rad etiladi — oddiy /start havolasi bilan
+            if not any(k in str(e) for k in ("USER_BOT_INVALID", "BUTTON_URL")):
+                raise
+            await query.answer([inline_result(c, mini_app=False) for c in found], cache_time=60, is_personal=False)
     except Exception:  # noqa: BLE001
         log.exception("Inline so'rov xatosi")
 
