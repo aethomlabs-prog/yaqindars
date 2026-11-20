@@ -1,0 +1,6 @@
+# Monorepo: mobil ilova, veb sayt, umumiy mantiq va Cloud Functions.
+# webapp/ (eski Telegram Mini App) — npm bilan alohida qoladi va 8-bosqichda o'chiriladi.
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "functions"

@@ -28,13 +28,8 @@ export const BOT_USERNAME: string = "";
 /** To‘lov va murojaatlar — admin kontaktlari (kabinetdagi «Hisobim», «Ilova haqida») */
 export const ADMIN_TELEGRAM = "NOZIMJONS";
 export const ADMIN_PHONE = "+998 90 389 21 26";
-/** Tarif narxlari (so‘m/oy) va bepul sinov muddati (kun) — bot/parsers.py tariff_price bilan bir xil.
- * Oddiy tarif: o‘quv markazi 75 000, repetitor 45 000. VIP — 150 000. */
-export const PRICES = { center: 75000, tutor: 45000, vip: 150000 } as const;
-export const TRIAL_DAYS = 15;
-export function tariffPrice(kind: "center" | "tutor", tariff: "oddiy" | "vip" | null | undefined): number {
-  return tariff === "vip" ? PRICES.vip : kind === "tutor" ? PRICES.tutor : PRICES.center;
-}
+/** Tarif narxlari va bepul davr — packages/shared/src/tariffs.ts (mobil ilova bilan umumiy) */
+export { PRICES, TRIAL_DAYS, tariffPrice } from "@shared/tariffs";
 
 /** Rus tili tarjimasi tayyor bo‘lguncha til tanlash yashirin, interfeys doim o‘zbekcha. */
 export const LANG_SWITCH_ENABLED = false;

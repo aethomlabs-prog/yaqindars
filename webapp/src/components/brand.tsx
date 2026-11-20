@@ -28,6 +28,7 @@ import {
   Trophy,
   type LucideIcon
 } from "lucide-react";
+import { SUBJECT_META as SHARED_SUBJECTS } from "@shared/subjects";
 
 export const PIN_PATH = "M50 4 C26 4 8 22 8 46 C8 76 50 116 50 116 C50 116 92 76 92 46 C92 22 74 4 50 4 Z";
 
@@ -49,40 +50,12 @@ export interface SubjectMeta {
   color: string;
 }
 
-/** Barcha fanlar — ilova, filtrlar, ro‘yxatdan o‘tish va kabinet shu ro‘yxatdan foydalanadi (bot/main.py SUBJECTS bilan bir xil) */
-export const SUBJECT_META: SubjectMeta[] = [
-  { name: "Ingliz tili", icon: Languages, color: "#1E6FD9" },
-  { name: "IELTS", icon: Award, color: "#B91C1C" },
-  { name: "CEFR", icon: Medal, color: "#0369A1" },
-  { name: "SAT", icon: Trophy, color: "#A16207" },
-  { name: "Matematika", icon: Sigma, color: "#7C3AED" },
-  { name: "IT", icon: Monitor, color: "#0E7490" },
-  { name: "Rus tili", icon: BookOpen, color: "#C2410C" },
-  { name: "Ona tili", icon: PenLine, color: "#B45309" },
-  { name: "Kimyo", icon: FlaskConical, color: "#13804F" },
-  { name: "Biologiya", icon: Leaf, color: "#4D7C0F" },
-  { name: "Fizika", icon: Atom, color: "#0F3D7A" },
-  { name: "Tarix", icon: Landmark, color: "#92400E" },
-  { name: "Geografiya", icon: Globe, color: "#047857" },
-  { name: "Huquq", icon: Scale, color: "#4338CA" },
-  { name: "Iqtisodiyot", icon: Coins, color: "#A16207" },
-  { name: "Nemis tili", icon: MessagesSquare, color: "#1F2937" },
-  { name: "Koreys tili", icon: MessagesSquare, color: "#BE185D" },
-  { name: "Turk tili", icon: MessagesSquare, color: "#DC2626" },
-  { name: "Arab tili", icon: MessagesSquare, color: "#15803D" },
-  { name: "Xitoy tili", icon: MessagesSquare, color: "#B91C1C" },
-  { name: "Fransuz tili", icon: MessagesSquare, color: "#1D4ED8" },
-  { name: "DTM / Abituriyent", icon: GraduationCap, color: "#0F3D7A" },
-  { name: "Robototexnika", icon: Bot, color: "#0E7490" },
-  { name: "Mental arifmetika", icon: Calculator, color: "#7C3AED" },
-  { name: "Maktabga tayyorlov", icon: Baby, color: "#DB2777" },
-  { name: "Boshlang‘ich sinf", icon: Backpack, color: "#C2410C" },
-  { name: "Rasm", icon: Palette, color: "#9333EA" },
-  { name: "Musiqa", icon: Music, color: "#BE123C" },
-  { name: "Sport", icon: Dumbbell, color: "#B93A1E" },
-  { name: "Shaxmat", icon: Crown, color: "#374151" },
-  { name: "Boshqa", icon: LayoutGrid, color: "#6B7280" }
-];
+/** Fanlar ro‘yxati va ranglari — packages/shared (mobil bilan umumiy); bu yerda faqat ikonka tanlanadi */
+const ICONS: Record<string, LucideIcon> = {
+  Languages, Award, Medal, Trophy, Sigma, Monitor, BookOpen, PenLine, FlaskConical, Leaf, Atom, Landmark, Globe, Scale, Coins,
+  MessagesSquare, GraduationCap, Bot, Calculator, Baby, Backpack, Palette, Music, Dumbbell, Crown, LayoutGrid
+};
+export const SUBJECT_META: SubjectMeta[] = SHARED_SUBJECTS.map((s) => ({ name: s.name, color: s.color, icon: ICONS[s.icon] ?? LayoutGrid }));
 
 export const subjectMeta = (name: string): SubjectMeta => SUBJECT_META.find((s) => s.name === name) ?? SUBJECT_META[SUBJECT_META.length - 1];
 

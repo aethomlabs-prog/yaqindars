@@ -1,85 +1,86 @@
 rules_version = '2';
+// YaqinDars — Firestore xavfsizlik qoidalari (mobil ilova modeli: request.auth.uid).
+// • Ota-onalar — ko'rinmas Firebase Anonymous Auth (uid).
+// • Markazlar va admin — Telegram orqali kirish → custom token, uid = "tg_<tgId>", claim'lar: tg, admin.
+// • Functions (Admin SDK) qoidalarni chetlab o'tadi: arizalar, limitlar, bildirishnomalar, to'lov holati.
+// LEGACY — eski Telegram Mini App (webapp/) uchun vaqtinchalik yo'llar; 8-bosqichda o'chiriladi.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Telegram orqali tasdiqlangan foydalanuvchi: Mini App anonim kiradi, bot initData imzosini
-    // tekshirib, unga "tg" (Telegram ID) claim'ini qo'yadi. Shu claim — yagona ishonchli ID.
-    function tg() {
-      return request.auth != null && ('tg' in request.auth.token) && request.auth.token.tg is int ? request.auth.token.tg : null;
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function isAdmin() { return signedIn() && request.auth.token.get('admin', false) == true; }
+    // Telegram ID claim (yangi custom token va LEGACY Mini App'da bir xil)
+    function tg() { return signedIn() && request.auth.token.get('tg', null) is int ? request.auth.token.tg : null; }
+    function isTg(id) { return tg() != null && tg() == id; }
+
+    // Markaz egasi: ownerUids ro'yxatida (rahbar + hamkorlar) yoki LEGACY ownerTgId
+    function isOwnerOf(c) { return signedIn() && (me() in c.get('ownerUids', []) || isTg(c.get('ownerTgId', null))); }
+    function ownsCenter(cid) { return isOwnerOf(get(/databases/$(database)/documents/centers/$(cid)).data); }
+    function centerOf(cid) { return get(/databases/$(database)/documents/centers/$(cid)).data; }
+
+    // Faqat admin / Functions o'zgartiradigan maydonlar
+    function protectedCenterKeys() {
+      return ['approved', 'vip', 'tariff', 'verified', 'verifiedAt', 'paidUntil', 'hidden', 'hiddenAt', 'ownerUids', 'ownerTgId',
+              'ownerUsername', 'claimed', 'claimedAt', 'claimedVia', 'status', 'approvedBy', 'ratingSum', 'ratingCount', 'source',
+              'createdAt', 'addedBy', 'billingReminded', 'lastReminderAt'];
     }
-    function isTg(id) {
-      return tg() != null && tg() == id;
-    }
-    // Admin (bot ADMIN_IDS dagilarga "admin" claim'ini qo'yadi) — admin dashboard (?mode=admin)
-    function isAdmin() {
-      return request.auth != null && request.auth.token.get('admin', false) == true;
+    function validPhone(p) { return p is string && p.matches('^\\+998[0-9]{9}$'); }
+    function validCenterFields(d) {
+      return d.name is string && d.name.size() >= 2 && d.name.size() <= 100
+        && validPhone(d.phone)
+        && d.get('address', '') is string && d.get('address', '').size() <= 200
+        && d.get('description', '') is string && d.get('description', '').size() <= 1000
+        && d.get('amenities', []) is list && d.get('amenities', []).size() <= 12
+        && d.get('groups', []) is list && d.get('groups', []).size() <= 10
+        && d.get('teachers', []) is list && d.get('teachers', []).size() <= 12
+        && d.lat is number && d.lng is number
+        && d.get('kind', 'center') in ['center', 'tutor']
+        && d.get('photoCount', 0) is int && d.get('photoCount', 0) >= 0 && d.get('photoCount', 0) <= 5;
     }
 
-    // Ochiq sozlamalar (bot username) — faqat bot yozadi.
+    // Ochiq sozlamalar
     match /meta/public {
       allow read: if true;
       allow write: if false;
     }
 
-    // Markazlar: hamma faqat TASDIQLANGANLARINI o'qiy oladi.
-    // Mini App so'rovi where("approved", "==", true) bilan bo'lishi shart, aks holda qoida rad etadi.
-    // Yozish faqat bot orqali (Admin SDK qoidalarni chetlab o'tadi).
-    // Markaz egasi (kabinet) o'z markazini tasdiqlanmagan bo'lsa ham ko'radi va faqat guruhlarini
-    // (bo'sh joy, narx) o'zgartira oladi. Qolgan maydonlar (approved, vip, tariff...) — faqat bot/admin.
-    function ownsCenter(cid) {
-      return isTg(get(/databases/$(database)/documents/centers/$(cid)).data.ownerTgId);
-    }
+    // ---------------- Markazlar ----------------
+    // O'qish: tasdiqlanganlar — hamma; o'zinikini — egasi; hammasini — admin.
+    // «hidden» (to'lov kechikkan) — ko'rsatish bayrog'i: ilova ro'yxatdan chiqaradi, ma'lumot sir emas.
     match /centers/{id} {
-      allow read: if resource.data.approved == true || isTg(resource.data.ownerTgId) || isAdmin();
-      // Admin: tasdiqlash / rad etish / VIP. Egaga xabarni bot yuboradi (approvedBy: 'web').
-      allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approved', 'vip', 'approvedBy', 'status', 'updatedAt'])
-        && request.resource.data.approvedBy == 'web'
-        && request.resource.data.status in ['approved', 'rejected']
-        && request.resource.data.approved is bool && request.resource.data.vip is bool;
-      // Admin: to'lov qabul qilindi — muddatni uzaytirish (yashirilgan bo'lsa xaritaga qaytadi)
-      allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paidUntil', 'updatedAt', 'hidden'])
-        && request.resource.data.paidUntil is timestamp
-        && request.resource.data.get('hidden', false) == false;
-      // Admin: «✓ Tasdiqlangan» belgisi (manzil, telefon va faoliyat tekshirilgan)
-      allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verified', 'verifiedAt', 'updatedAt'])
-        && request.resource.data.verified is bool
-        && (request.resource.data.verifiedAt == null || request.resource.data.verifiedAt == request.time);
+      allow read: if resource.data.approved == true || isOwnerOf(resource.data) || isAdmin();
+
+      // Ro'yxatdan o'tish (Markaz rejimi): o'zini yagona egasi qilib, tasdiqlanmagan holda
+      allow create: if signedIn() && tg() != null
+        && request.resource.data.ownerUids == [me()]
+        && request.resource.data.approved == false
+        && request.resource.data.vip == false
+        && request.resource.data.get('tariff', 'oddiy') in ['oddiy', 'vip']
+        && !request.resource.data.keys().hasAny(['verified', 'verifiedAt', 'paidUntil', 'hidden', 'ownerTgId', 'ratingSum', 'ratingCount'])
+        && request.resource.data.createdAt == request.time
+        && validCenterFields(request.resource.data);
       // Admin: tez qo'shish — egasiz markaz («Ma'lumot tasdiqlanmagan»)
       allow create: if isAdmin()
         && request.resource.data.source == 'admin'
         && request.resource.data.claimed == false
-        && request.resource.data.ownerTgId == null
+        && request.resource.data.get('ownerUids', []).size() == 0
+        && request.resource.data.get('ownerTgId', null) == null
         && request.resource.data.approved == true
-        && request.resource.data.name is string && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 100
-        && request.resource.data.lat is number && request.resource.data.lng is number
-        && request.resource.data.phone is string && request.resource.data.phone.matches('^\\+998[0-9]{9}$')
-        && request.resource.data.groups is list && request.resource.data.groups.size() <= 10;
-      allow update: if isTg(resource.data.ownerTgId)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['groups', 'updatedAt'])
-        && request.resource.data.groups is list && request.resource.data.groups.size() <= 10
-        && request.resource.data.updatedAt == request.time;
-      // Egasi: profilini o'zgartiradi (nomi, telefon, manzil, tavsif, sharoitlar, yosh, xaritadagi joy, rasmlar soni)
-      allow update: if isTg(resource.data.ownerTgId)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
-             ['name', 'phone', 'address', 'description', 'amenities', 'ageFrom', 'ageTo', 'lat', 'lng', 'photoCount', 'updatedAt'])
-        && request.resource.data.name is string && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 100
-        && request.resource.data.phone is string && request.resource.data.phone.matches('^\\+998[0-9]{9}$')
-        && request.resource.data.address is string && request.resource.data.address.size() <= 200
-        && request.resource.data.get('description', '') is string && request.resource.data.get('description', '').size() <= 1000
-        && request.resource.data.get('amenities', []) is list && request.resource.data.get('amenities', []).size() <= 12
-        && (request.resource.data.get('ageFrom', null) == null || (request.resource.data.ageFrom is int && request.resource.data.ageFrom >= 0 && request.resource.data.ageFrom <= 99))
-        && (request.resource.data.get('ageTo', null) == null || (request.resource.data.ageTo is int && request.resource.data.ageTo >= 0 && request.resource.data.ageTo <= 99))
-        && request.resource.data.lat is number && request.resource.data.lng is number
-        && (request.resource.data.get('photoCount', 0) is int && request.resource.data.get('photoCount', 0) >= 0 && request.resource.data.get('photoCount', 0) <= 5)
-        && request.resource.data.updatedAt == request.time;
+        && validCenterFields(request.resource.data);
+
+      // Egasi: profil, guruhlar, o'qituvchilar, rasmlar soni — himoyalangan maydonlarsiz
+      allow update: if isOwnerOf(resource.data)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedCenterKeys())
+        && request.resource.data.updatedAt == request.time
+        && validCenterFields(request.resource.data);
+      // Admin: istalgan maydon (tasdiqlash, VIP, to'lov, belgi, biriktirish)
+      allow update: if isAdmin();
       allow delete: if false;
 
-      // Markaz rasmlari: 0..4 hujjat, telefonda siqilgan JPEG (data URL, ~170 KB gacha). Faqat egasi yozadi.
+      // LEGACY: rasmlar Firestore'da (data URL). Yangi ilova — Firebase Storage (storage.rules).
       match /photos/{n} {
-        allow read: if get(/databases/$(database)/documents/centers/$(id)).data.approved == true || ownsCenter(id) || isAdmin();
+        allow read: if centerOf(id).approved == true || ownsCenter(id) || isAdmin();
         allow delete: if ownsCenter(id) && n in ['0', '1', '2', '3', '4'];
         allow create, update: if ownsCenter(id) && n in ['0', '1', '2', '3', '4']
           && request.resource.data.keys().hasOnly(['data', 'order'])
@@ -90,7 +91,171 @@ service cloud.firestore {
       }
     }
 
-    // «Bu mening markazim»: ID = "<tgId>_<markazId>" (bitta markazga bitta so'rov). Admin botda tasdiqlaydi.
+    // ---------------- Foydalanuvchi profili ----------------
+    // users/{uid} — faqat o'zi. LEGACY: users/{tgId} (Mini App).
+    match /users/{uid} {
+      function self() { return signedIn() && (me() == uid || (tg() != null && string(tg()) == uid)); }
+      allow read: if self() || isAdmin();
+      // role va Telegram ma'lumotlarini faqat Functions yozadi
+      allow create: if self() && !request.resource.data.keys().hasAny(['role', 'tgId', 'tgUsername', 'tgName']);
+      allow update: if self() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'tgId', 'tgUsername', 'tgName']);
+      allow delete: if self();
+      match /{sub}/{docId} {
+        allow read, write: if self() && sub in ['children', 'favorites', 'addresses', 'devices'];
+      }
+    }
+
+    // ---------------- Arizalar ----------------
+    // Yangi ilova arizani FAQAT callable submitApplication orqali yuboradi (limitlar Functions'da).
+    match /applications/{id} {
+      function isApplicant(d) { return signedIn() && (d.get('uid', '') == me() || isTg(d.get('tgUserId', null))); }
+
+      // LEGACY: Mini App to'g'ridan-to'g'ri yozadi (uid maydonisiz)
+      function validLegacyApplication(d) {
+        return d.keys().hasOnly(['centerId', 'centerName', 'group', 'groupIndex', 'name', 'phone',
+                                 'childId', 'comment', 'tgUserId', 'tgUsername', 'source', 'createdAt', 'notified', 'status'])
+          && d.keys().hasAll(['centerId', 'name', 'phone', 'createdAt', 'notified', 'status'])
+          && d.centerId is string && d.centerId.size() > 0 && d.centerId.size() <= 64
+          && (!('centerName' in d) || (d.centerName is string && d.centerName.size() <= 100))
+          && (!('group' in d) || (d.group is string && d.group.size() <= 120))
+          && d.name is string && d.name.size() >= 2 && d.name.size() <= 60
+          && validPhone(d.phone)
+          && (!('groupIndex' in d) || (d.groupIndex is int && d.groupIndex >= 0 && d.groupIndex < 20))
+          && (!('childId' in d) || d.childId == null || (d.childId is string && d.childId.size() <= 64))
+          && (!('comment' in d) || (d.comment is string && d.comment.size() <= 300))
+          && (!('tgUserId' in d) || d.tgUserId == null || isTg(d.tgUserId))
+          && (!('source' in d) || d.source == null || (d.source is string && d.source.matches('^(src_[a-z0-9_]{2,30}|c_[A-Za-z0-9]{1,40})$')))
+          && (!('tgUsername' in d) || d.tgUsername == null || (d.tgUsername is string && d.tgUsername.size() <= 64))
+          && d.notified == false && d.status == 'new' && d.createdAt == request.time;
+      }
+      allow create: if validLegacyApplication(request.resource.data) && centerOf(request.resource.data.centerId).approved == true;
+
+      allow read: if isApplicant(resource.data) || ownsCenter(resource.data.centerId) || isAdmin();
+      // Markaz egasi holatni belgilaydi; ota-onaga xabarni Functions yuboradi
+      allow update: if ownsCenter(resource.data.centerId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'statusBy', 'trialAt'])
+        && request.resource.data.status in ['seen', 'accepted', 'rejected']
+        && request.resource.data.statusBy in ['web', 'app']
+        && (request.resource.data.get('trialAt', null) == null || request.resource.data.trialAt is timestamp);
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // ---------------- Chat (ota-ona ↔ markaz) ----------------
+    // ID: "<uid>_<markazId>" (LEGACY: "<tgId>_<markazId>"). Xabarlarni bildirishnoma qilib Functions yuboradi.
+    match /chats/{chatId} {
+      function isParent(d) { return signedIn() && (d.get('userUid', '') == me() || isTg(d.get('userTgId', null))); }
+      function isCenterSide(d) { return ownsCenter(d.centerId); }
+
+      allow read: if resource == null || isParent(resource.data) || isCenterSide(resource.data) || isAdmin();
+      allow create: if signedIn()
+        && request.resource.data.userUid == me()
+        && chatId == me() + '_' + request.resource.data.centerId
+        && request.resource.data.keys().hasOnly(['type', 'centerId', 'centerName', 'userUid', 'userName',
+                                                 'lastMessage', 'lastAt', 'unreadUser', 'unreadCenter'])
+        && request.resource.data.type == 'center'
+        && request.resource.data.centerName is string && request.resource.data.centerName.size() <= 100
+        && request.resource.data.lastMessage == ''
+        && request.resource.data.unreadUser == 0 && request.resource.data.unreadCenter == 0
+        && centerOf(request.resource.data.centerId).approved == true;
+      // LEGACY yaratish (Mini App)
+      allow create: if isTg(request.resource.data.userTgId)
+        && chatId == string(tg()) + '_' + request.resource.data.centerId
+        && request.resource.data.keys().hasOnly(['type', 'centerId', 'centerName', 'userTgId', 'userName', 'userUsername',
+                                                 'lastMessage', 'lastAt', 'unreadUser', 'unreadCenter'])
+        && request.resource.data.type == 'center'
+        && request.resource.data.lastMessage == ''
+        && request.resource.data.unreadUser == 0 && request.resource.data.unreadCenter == 0
+        && centerOf(request.resource.data.centerId).approved == true;
+      // Ota-ona: yozdi (unreadCenter +1) yoki o'qidi (unreadUser = 0)
+      allow update: if isParent(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastAt', 'unreadCenter', 'unreadUser'])
+        && request.resource.data.unreadUser in [0, resource.data.unreadUser]
+        && request.resource.data.unreadCenter in [resource.data.unreadCenter, resource.data.unreadCenter + 1]
+        && request.resource.data.lastMessage is string && request.resource.data.lastMessage.size() <= 200;
+      // Markaz: javob berdi (unreadUser +1) yoki o'qidi (unreadCenter = 0)
+      allow update: if isCenterSide(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastAt', 'unreadCenter', 'unreadUser'])
+        && request.resource.data.unreadCenter in [0, resource.data.unreadCenter]
+        && request.resource.data.unreadUser in [resource.data.unreadUser, resource.data.unreadUser + 1]
+        && request.resource.data.lastMessage is string && request.resource.data.lastMessage.size() <= 200;
+      allow delete: if isParent(resource.data);
+
+      match /messages/{msgId} {
+        function chat() { return get(/databases/$(database)/documents/chats/$(chatId)).data; }
+        function validMsg(from) {
+          return request.resource.data.keys().hasOnly(['from', 'text', 'createdAt', 'notified'])
+            && request.resource.data.from == from
+            && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000
+            && request.resource.data.notified == false
+            && request.resource.data.createdAt == request.time;
+        }
+        allow read: if isParent(chat()) || isCenterSide(chat()) || isAdmin();
+        allow create: if (isParent(chat()) && validMsg('user')) || (isCenterSide(chat()) && validMsg('center'));
+        allow update, delete: if false;
+      }
+    }
+
+    // ---------------- Ota-onalar: kuzatuv, navbat, baho, shikoyat ----------------
+    match /watches/{id} {
+      function owner(d) { return signedIn() && (d.get('userUid', '') == me() || isTg(d.get('userTgId', null))); }
+      allow read: if owner(resource.data) || isAdmin();
+      allow delete: if owner(resource.data);
+      allow create: if signedIn()
+        && (request.resource.data.get('userUid', '') == me() || isTg(request.resource.data.get('userTgId', null)))
+        && request.resource.data.keys().hasOnly(['userUid', 'userTgId', 'subject', 'radiusKm', 'maxPrice', 'days', 'lat', 'lng', 'active', 'createdAt'])
+        && (request.resource.data.subject == null || (request.resource.data.subject is string && request.resource.data.subject.size() <= 40))
+        && (request.resource.data.radiusKm == null || (request.resource.data.radiusKm is number && request.resource.data.radiusKm > 0 && request.resource.data.radiusKm <= 50))
+        && (request.resource.data.maxPrice == null || (request.resource.data.maxPrice is number && request.resource.data.maxPrice >= 10000 && request.resource.data.maxPrice <= 10000000))
+        && request.resource.data.days is list && request.resource.data.days.size() <= 7
+        && request.resource.data.lat is number && request.resource.data.lng is number
+        && request.resource.data.active == true
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
+    }
+
+    // «Joy bo'shasa xabar ber»
+    match /waitlist/{id} {
+      allow create: if signedIn()
+        && (request.resource.data.get('userUid', '') == me() || isTg(request.resource.data.get('userTgId', null)))
+        && request.resource.data.keys().hasOnly(['centerId', 'groupIndex', 'userUid', 'userTgId', 'createdAt', 'notified'])
+        && request.resource.data.centerId is string && request.resource.data.centerId.size() <= 64
+        && request.resource.data.groupIndex is int && request.resource.data.groupIndex >= 0 && request.resource.data.groupIndex < 20
+        && request.resource.data.notified == false
+        && request.resource.data.createdAt == request.time;
+      allow read: if isAdmin() || (signedIn() && resource.data.get('userUid', '') == me());
+      allow update, delete: if false;
+    }
+
+    // Baholar — Functions yozadi (faqat qabul qilingan ariza egasi, bir marta)
+    match /ratings/{id} {
+      allow read: if isAdmin() || (signedIn() && (resource.data.get('userUid', '') == me() || isTg(resource.data.get('userTgId', null))));
+      allow write: if false;
+    }
+
+    // «Ma'lumot noto'g'ri» — ID = "<uid yoki tgId>_<markazId>_<sana>": kuniga bir markazga bitta
+    match /reports/{id} {
+      function validReport(d) {
+        return d.centerId is string && d.centerId.size() > 0 && d.centerId.size() <= 64
+          && d.centerName is string && d.centerName.size() <= 100
+          && d.reason in ['price', 'seats', 'contact', 'closed', 'other']
+          && d.comment is string && d.comment.size() <= 300
+          && d.status == 'new' && d.createdAt == request.time;
+      }
+      allow read: if isAdmin() || (signedIn() && (resource.data.get('uid', '') == me() || isTg(resource.data.get('tgId', null))));
+      allow create: if signedIn() && request.resource.data.get('uid', '') == me()
+        && id.matches('^' + me() + '_' + request.resource.data.centerId + '_20[0-9]{2}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.keys().hasOnly(['centerId', 'centerName', 'reason', 'comment', 'uid', 'status', 'createdAt'])
+        && validReport(request.resource.data);
+      // LEGACY
+      allow create: if isTg(request.resource.data.get('tgId', null))
+        && id.matches('^' + string(tg()) + '_' + request.resource.data.centerId + '_20[0-9]{2}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.keys().hasOnly(['centerId', 'centerName', 'reason', 'comment', 'tgId', 'status', 'createdAt'])
+        && validReport(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    // «Bu mening markazim» (egallash) — Telegram orqali kirgan foydalanuvchi (tg claim)
     match /claimRequests/{id} {
       function validClaim(d) {
         return d.keys().hasOnly(['centerId', 'centerName', 'tgId', 'name', 'username', 'status', 'createdAt'])
@@ -102,58 +267,25 @@ service cloud.firestore {
           && (d.username == null || (d.username is string && d.username.size() <= 64))
           && d.status == 'pending'
           && d.createdAt == request.time
-          && get(/databases/$(database)/documents/centers/$(d.centerId)).data.get('claimed', true) == false;
+          && centerOf(d.centerId).get('claimed', true) == false;
       }
       allow read: if resource == null || isTg(resource.data.tgId) || isAdmin();
       allow create: if validClaim(request.resource.data);
-      // Rad etilgan so'rovni qayta yuborish mumkin
       allow update: if resource.data.status == 'rejected' && validClaim(request.resource.data);
       allow delete: if false;
     }
 
-    // «Ma'lumot noto'g'ri» shikoyati. ID = "<tgId>_<markazId>_<sana>" — kuniga bir markazga bitta.
-    // Yuborgan foydalanuvchi o'zinikini, admin hammasini ko'radi; holatni bot o'zgartiradi.
-    match /reports/{id} {
-      allow read: if isTg(resource.data.tgId) || isAdmin();
-      allow create: if isTg(request.resource.data.tgId)
-        && id.matches('^' + string(tg()) + '_' + request.resource.data.centerId + '_20[0-9]{2}-[0-9]{2}-[0-9]{2}$')
-        && request.resource.data.keys().hasOnly(['centerId', 'centerName', 'reason', 'comment', 'tgId', 'status', 'createdAt'])
-        && request.resource.data.centerId is string && request.resource.data.centerId.size() > 0 && request.resource.data.centerId.size() <= 64
-        && request.resource.data.centerName is string && request.resource.data.centerName.size() <= 100
-        && request.resource.data.reason in ['price', 'seats', 'contact', 'closed', 'other']
-        && request.resource.data.comment is string && request.resource.data.comment.size() <= 300
-        && request.resource.data.status == 'new'
-        && request.resource.data.createdAt == request.time;
-      allow update, delete: if false;
+    // ---------------- Telegram orqali kirish ----------------
+    // Token hujjatini faqat Functions yozadi; ilova (o'sha anonim uid) holatini real vaqtda kuzatadi.
+    match /tgLogins/{token} {
+      allow read: if signedIn() && resource.data.anonUid == me();
+      allow write: if false;
     }
+    match /tgLoginFails/{uid} { allow read, write: if false; }
+    // Ariza limitlari va boshqa hisoblagichlar — faqat Functions
+    match /counters/{id} { allow read, write: if false; }
 
-    // Admin bergan bir martalik kodlar (/claimcode) — faqat bot
-    match /claimCodes/{code} {
-      allow read, write: if false;
-    }
-
-    // Ilovadan botga topshiriq: markaz egasi o'z markazining QR posterini so'raydi;
-    // admin — «Yangilanmagan markazlar»ga bir bosishda eslatma
-    match /botRequests/{id} {
-      allow create: if isTg(request.resource.data.tgId)
-        && request.resource.data.keys().hasOnly(['type', 'centerId', 'tgId', 'status', 'createdAt'])
-        && request.resource.data.type == 'qr'
-        && request.resource.data.centerId is string && request.resource.data.centerId.size() <= 64
-        && ownsCenter(request.resource.data.centerId)
-        && request.resource.data.status == 'pending'
-        && request.resource.data.createdAt == request.time;
-      allow create: if isAdmin() && isTg(request.resource.data.tgId)
-        && request.resource.data.keys().hasOnly(['type', 'tgId', 'status', 'createdAt'])
-        && request.resource.data.type == 'remindStale'
-        && request.resource.data.status == 'pending'
-        && request.resource.data.createdAt == request.time;
-      allow read: if isAdmin();
-      allow update, delete: if false;
-    }
-
-    // Markaz statistikasi: kunlik hisoblagich, ID = "<markazId>_<YYYY-MM-DD>".
-    // Ilova faqat bitta maydonni +1 qila oladi (ko'rish, qo'ng'iroq, yo'l); arizalarni bot sanaydi.
-    // O'qish — faqat markaz egasi va admin.
+    // ---------------- Statistika (kunlik hisoblagichlar, +1 dan boshqa yozuv yo'q) ----------------
     match /centerStats/{id} {
       allow read: if isAdmin() || ownsCenter(resource.data.centerId);
       allow create: if id == request.resource.data.centerId + '_' + request.resource.data.date
@@ -171,9 +303,6 @@ service cloud.firestore {
         && request.resource.data.get('routes', 0) - resource.data.get('routes', 0) in [0, 1];
       allow delete: if false;
     }
-
-    // Admin voronkasi: kunlik hisoblagich, ID = sana. Ilova faqat «open» (qurilma/kun) va «view» ni +1 qiladi;
-    // apply/accept ni bot yozadi. O'qish — faqat admin.
     match /dailyStats/{date} {
       allow read: if isAdmin();
       allow create: if date.matches('^20[0-9]{2}-[0-9]{2}-[0-9]{2}$')
@@ -188,9 +317,6 @@ service cloud.firestore {
         && request.resource.data.get('view', 0) - resource.data.get('view', 0) in [0, 1];
       allow delete: if false;
     }
-
-    // Manbalar: ID = src_<kanal> yoki c_<markazId>. Ilova «users» ni +1 qiladi (qurilmada bir marta),
-    // «apps» ni bot yozadi. O'qish — faqat admin.
     match /sourceStats/{src} {
       allow read: if isAdmin();
       allow create: if src.matches('^(src_[a-z0-9_]{2,30}|c_[A-Za-z0-9]{1,40})$')
@@ -202,34 +328,32 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Telegram tasdiqlash so'rovi: anonim foydalanuvchi faqat o'z hujjatini "pending" holatida yozadi.
+    // Texnik xatolar: ilova yozadi (o'lchami cheklangan), faqat admin o'qiydi
+    match /logs/{id} {
+      allow read: if isAdmin();
+      allow create: if request.resource.data.keys().hasOnly(['source', 'level', 'message', 'stack', 'screen', 'device', 'url', 'tgUserId', 'uid', 'createdAt'])
+        && request.resource.data.source in ['web', 'app'] && request.resource.data.level == 'error'
+        && request.resource.data.message is string && request.resource.data.message.size() <= 1000
+        && request.resource.data.stack is string && request.resource.data.stack.size() <= 2000
+        && request.resource.data.screen is string && request.resource.data.screen.size() <= 100
+        && request.resource.data.device is string && request.resource.data.device.size() <= 300
+        && request.resource.data.get('url', '') is string && request.resource.data.get('url', '').size() <= 200
+        && (request.resource.data.get('tgUserId', null) == null || isTg(request.resource.data.tgUserId))
+        && (request.resource.data.get('uid', null) == null || (signedIn() && request.resource.data.uid == me()))
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // ---------------- LEGACY (Mini App + Python bot) — 8-bosqichda o'chiriladi ----------------
     match /tgLinks/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow create, update: if request.auth != null && request.auth.uid == uid
+      allow read: if signedIn() && me() == uid;
+      allow create, update: if signedIn() && me() == uid
         && request.resource.data.keys().hasOnly(['initData', 'status', 'createdAt'])
         && request.resource.data.initData is string && request.resource.data.initData.size() <= 4096
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt == request.time;
       allow delete: if false;
     }
-
-    // Texnik xato yozuvlari: ilova yozadi (o'lchami cheklangan), faqat admin o'qiydi.
-    // "admin" claim'ini bot ADMIN_IDS dagilarga Telegram tasdiqlashda qo'yadi.
-    match /logs/{id} {
-      allow read: if isAdmin();
-      allow create: if request.resource.data.keys().hasOnly(['source', 'level', 'message', 'stack', 'screen', 'device', 'url', 'tgUserId', 'createdAt'])
-        && request.resource.data.source == 'web' && request.resource.data.level == 'error'
-        && request.resource.data.message is string && request.resource.data.message.size() <= 1000
-        && request.resource.data.stack is string && request.resource.data.stack.size() <= 2000
-        && request.resource.data.screen is string && request.resource.data.screen.size() <= 100
-        && request.resource.data.device is string && request.resource.data.device.size() <= 300
-        && request.resource.data.url is string && request.resource.data.url.size() <= 200
-        && (request.resource.data.tgUserId == null || isTg(request.resource.data.tgUserId))
-        && request.resource.data.createdAt == request.time;
-      allow update, delete: if false;
-    }
-
-    // AI yordamchi: foydalanuvchi savol yozadi, javobni bot (Groq orqali) yozadi.
     match /aiRequests/{id} {
       allow read: if isTg(resource.data.userTgId) || isAdmin();
       allow create: if isTg(request.resource.data.userTgId)
@@ -241,8 +365,6 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time;
       allow update, delete: if false;
     }
-
-    // «Ma'lumotlarimni o'chirish»: foydalanuvchi so'rov qoldiradi, o'chirishni bot (Admin SDK) bajaradi.
     match /deleteRequests/{tgId} {
       allow read: if tg() != null && string(tg()) == tgId;
       allow create, update: if tg() != null && string(tg()) == tgId
@@ -251,132 +373,26 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time;
       allow delete: if false;
     }
-
-    // Profil: faqat egasi (hujjat ID = Telegram ID).
-    match /users/{tgId} {
-      allow read, write: if tg() != null && string(tg()) == tgId;
-      match /{sub}/{docId} {
-        allow read, write: if tg() != null && string(tg()) == tgId && sub in ['children', 'favorites'];
-      }
-    }
-
-    // Arizalar: Mini App yangi ariza yaratadi; tasdiqlangan foydalanuvchi faqat O'Z arizalarini o'qiydi.
-    // Holatni (seen/accepted/rejected) faqat bot o'zgartiradi.
-    match /applications/{id} {
-      function validApplication(d) {
-        return d.keys().hasOnly(['centerId', 'centerName', 'group', 'groupIndex', 'name', 'phone',
-                                 'childId', 'comment', 'tgUserId', 'tgUsername', 'source', 'createdAt', 'notified', 'status'])
-          && d.keys().hasAll(['centerId', 'name', 'phone', 'createdAt', 'notified', 'status'])
-          && d.centerId is string && d.centerId.size() > 0 && d.centerId.size() <= 64
-          && (!('centerName' in d) || (d.centerName is string && d.centerName.size() <= 100))
-          && (!('group' in d) || (d.group is string && d.group.size() <= 120))
-          && d.name is string && d.name.size() >= 2 && d.name.size() <= 60
-          && d.phone is string && d.phone.matches('^\\+998[0-9]{9}$')
-          && (!('groupIndex' in d) || (d.groupIndex is int && d.groupIndex >= 0 && d.groupIndex < 20))
-          && (!('childId' in d) || d.childId == null || (d.childId is string && d.childId.size() <= 64))
-          && (!('comment' in d) || (d.comment is string && d.comment.size() <= 300))
-          // tgUserId — faqat o'ziniki (boshqa odam nomidan ariza yuborib bo'lmaydi)
-          && (!('tgUserId' in d) || d.tgUserId == null || isTg(d.tgUserId))
-          // qayerdan kelgan: src_<kanal> yoki c_<markazId> (kampaniya / markaz QR'i)
-          && (!('source' in d) || d.source == null || (d.source is string && d.source.matches('^(src_[a-z0-9_]{2,30}|c_[A-Za-z0-9]{1,40})$')))
-          && (!('tgUsername' in d) || d.tgUsername == null
-              || (d.tgUsername is string && d.tgUsername.size() <= 64))
-          && d.notified == false
-          && d.status == 'new'
-          && d.createdAt == request.time;
-      }
-
-      allow create: if validApplication(request.resource.data)
-        // ariza faqat mavjud va tasdiqlangan markazga
-        && get(/databases/$(database)/documents/centers/$(request.resource.data.centerId)).data.approved == true;
-      allow read: if isTg(resource.data.tgUserId) || ownsCenter(resource.data.centerId) || isAdmin();
-      // Kabinet: markaz egasi holatni belgilaydi; bot "statusBy: web" ni ko'rib ota-onaga xabar yuboradi
-      allow update: if ownsCenter(resource.data.centerId)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'statusBy', 'trialAt'])
-        && request.resource.data.status in ['seen', 'accepted', 'rejected']
-        && request.resource.data.statusBy == 'web'
-        && (request.resource.data.get('trialAt', null) == null || request.resource.data.trialAt is timestamp);
-      allow delete: if false;
-    }
-
-    // «Joy bo'shasa xabar ber»
-    match /waitlist/{id} {
-      allow create: if isTg(request.resource.data.userTgId)
-        && request.resource.data.keys().hasOnly(['centerId', 'groupIndex', 'userTgId', 'createdAt', 'notified'])
+    match /botRequests/{id} {
+      allow create: if isTg(request.resource.data.tgId)
+        && request.resource.data.keys().hasOnly(['type', 'centerId', 'tgId', 'status', 'createdAt'])
+        && request.resource.data.type == 'qr'
         && request.resource.data.centerId is string && request.resource.data.centerId.size() <= 64
-        && request.resource.data.groupIndex is int && request.resource.data.groupIndex >= 0 && request.resource.data.groupIndex < 20
-        && request.resource.data.notified == false
+        && ownsCenter(request.resource.data.centerId)
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+      allow create: if isAdmin() && isTg(request.resource.data.tgId)
+        && request.resource.data.keys().hasOnly(['type', 'tgId', 'status', 'createdAt'])
+        && request.resource.data.type == 'remindStale'
+        && request.resource.data.status == 'pending'
         && request.resource.data.createdAt == request.time;
       allow read: if isAdmin();
       allow update, delete: if false;
     }
 
-    // Markaz bilan chat. Hujjat ID: "<tgId>_<centerId>". Markaz javoblarini bot yozadi.
-    match /chats/{chatId} {
-      allow read: if resource == null || isTg(resource.data.userTgId) || isAdmin();
-      allow create: if isTg(request.resource.data.userTgId)
-        && chatId == string(tg()) + '_' + request.resource.data.centerId
-        && request.resource.data.keys().hasOnly(['type', 'centerId', 'centerName', 'userTgId', 'userName', 'userUsername',
-                                                 'lastMessage', 'lastAt', 'unreadUser', 'unreadCenter'])
-        && request.resource.data.type == 'center'
-        && request.resource.data.centerName is string && request.resource.data.centerName.size() <= 100
-        && request.resource.data.lastMessage == ''
-        && request.resource.data.unreadUser == 0 && request.resource.data.unreadCenter == 0
-        && get(/databases/$(database)/documents/centers/$(request.resource.data.centerId)).data.approved == true;
-      // Foydalanuvchi: xabar yuborganda (lastMessage, lastAt, unreadCenter+1) yoki o'qiganda (unreadUser=0)
-      allow update: if isTg(resource.data.userTgId)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastAt', 'unreadCenter', 'unreadUser'])
-        && request.resource.data.unreadUser in [0, resource.data.unreadUser]
-        && request.resource.data.unreadCenter in [resource.data.unreadCenter, resource.data.unreadCenter + 1]
-        && request.resource.data.lastMessage is string && request.resource.data.lastMessage.size() <= 200;
-      allow delete: if isTg(resource.data.userTgId);
-
-      match /messages/{msgId} {
-        function chat() {
-          return get(/databases/$(database)/documents/chats/$(chatId)).data;
-        }
-        allow read: if isTg(chat().userTgId);
-        allow create: if isTg(chat().userTgId)
-          && request.resource.data.keys().hasOnly(['from', 'text', 'createdAt', 'notified'])
-          && request.resource.data.from == 'user'
-          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000
-          && request.resource.data.notified == false
-          && request.resource.data.createdAt == request.time;
-        allow update, delete: if false;
-      }
-    }
-
-    // Saqlangan qidiruv («Shunday joy ochilsa xabar ber»): faqat egasi ko'radi va o'chiradi.
-    // "sent" (yuborilganlar) maydonini faqat bot yozadi.
-    match /watches/{id} {
-      allow read: if isTg(resource.data.userTgId) || isAdmin();
-      allow delete: if isTg(resource.data.userTgId);
-      allow create: if isTg(request.resource.data.userTgId)
-        && request.resource.data.keys().hasOnly(['userTgId', 'subject', 'radiusKm', 'maxPrice', 'days', 'lat', 'lng', 'active', 'createdAt'])
-        && (request.resource.data.subject == null || (request.resource.data.subject is string && request.resource.data.subject.size() <= 40))
-        && (request.resource.data.radiusKm == null || (request.resource.data.radiusKm is number && request.resource.data.radiusKm > 0 && request.resource.data.radiusKm <= 50))
-        && (request.resource.data.maxPrice == null || (request.resource.data.maxPrice is number && request.resource.data.maxPrice >= 10000 && request.resource.data.maxPrice <= 10000000))
-        && request.resource.data.days is list && request.resource.data.days.size() <= 7
-        && request.resource.data.lat is number && request.resource.data.lng is number
-        && request.resource.data.active == true
-        && request.resource.data.createdAt == request.time;
-      allow update: if false;
-    }
-    // Kuzatuv xabarlari kunlik hisobi (kuniga 3 tagacha) — faqat bot
-    match /watchDaily/{id} {
-      allow read, write: if false;
-    }
-
-    // Sinov darsidan keyingi baholar: bot yozadi (faqat qabul qilingan ariza egasi, bir marta).
-    // O'qish — bahoni qo'ygan ota-ona va admin.
-    match /ratings/{id} {
-      allow read: if isTg(resource.data.userTgId) || isAdmin();
-      allow write: if false;
-    }
-
-    // Bot ichki holati (yagona nusxa qulfi, rejalashtiruvchi) — faqat bot (Admin SDK) ishlatadi
-    match /system/{doc} {
-      allow read, write: if false;
-    }
+    // Faqat server: kodlar, kuzatuv hisobi, bot holati
+    match /claimCodes/{code} { allow read, write: if false; }
+    match /watchDaily/{id} { allow read, write: if false; }
+    match /system/{doc} { allow read, write: if false; }
   }
 }

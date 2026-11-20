@@ -1,3 +1,27 @@
+# YaqinDars — mobil ilovaga o‘tish (monorepo)
+
+> Yangi tuzilma (pnpm workspaces). Eski Telegram Mini App (`webapp/`) va Python bot (`bot/`) 8-bosqichgacha ishlab turadi.
+
+| Papka | Nima |
+|---|---|
+| `apps/mobile` | Expo SDK 58 ilova (Android/iOS), React Native Firebase |
+| `packages/shared` | Umumiy mantiq: turlar, filtrlar, qidiruv, masofa, formatlash, 31 fan, tariflar, limitlar (jest testlari) |
+| `functions` | Cloud Functions: Telegram orqali kirish (webhook), arizalar (limitlar bilan) |
+| `firestore.rules`, `storage.rules` | `request.auth.uid` modeli (+ vaqtincha eski Mini App yo‘llari) |
+| `scripts/fb.cjs` | firebase-tools o‘rami (VS Code terminali va Java 21 uchun) |
+
+**Talablar:** Node 22.13+ (Expo SDK 58), pnpm 9, Java 21 (emulyatorlar uchun).
+
+```bash
+pnpm install
+pnpm --filter @yaqindars/shared test       # umumiy mantiq testlari
+pnpm --filter functions test               # Functions + Firestore qoidalari (emulyatorda)
+pnpm emulators                             # Firebase Emulator Suite (UI: http://localhost:4000)
+cd apps/mobile && pnpm typecheck
+```
+
+---
+
 # YaqinDars — Telegram Mini App + Bot + Firebase
 
 Ota-onalar va o‘quvchilarga uyiga yaqin o‘quv markazlari, to‘garaklar va repetitorlarni xaritada topishga yordam beradigan servis.

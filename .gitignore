@@ -25,3 +25,15 @@ dist/
 *.zip
 *.zip.part*
 yaqindars_*.json
+
+# Monorepo
+.pnpm-store/
+emulator-data/
+functions/lib/
+apps/mobile/.expo/
+apps/mobile/android/
+apps/mobile/ios/
+*.tsbuildinfo
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

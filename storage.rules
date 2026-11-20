@@ -1,0 +1,30 @@
+rules_version = '2';
+// YaqinDars — Firebase Storage qoidalari.
+// centers/{id}/photos/{0-4}.jpg — markaz rasmlari: hamma ko'radi, faqat egasi (ownerUids) yoki admin yuklaydi.
+// posters/{id}.png — QR poster: Functions yozadi, hamma o'qiydi.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAdmin() { return request.auth != null && request.auth.token.get('admin', false) == true; }
+    function ownsCenter(cid) {
+      return request.auth != null
+        && request.auth.uid in firestore.get(/databases/(default)/documents/centers/$(cid)).data.get('ownerUids', []);
+    }
+
+    match /centers/{cid}/photos/{file} {
+      allow read: if true;
+      allow write: if (ownsCenter(cid) || isAdmin())
+        && file.matches('^[0-4][.]jpg$')
+        && (request.resource == null
+            || (request.resource.size < 700 * 1024 && request.resource.contentType == 'image/jpeg'));
+    }
+
+    match /posters/{file} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /{all=**} {
+      allow read, write: if false;
+    }
+  }
+}
