@@ -392,6 +392,11 @@ def ibtn(text: str, url: str, style: str | None = None) -> InlineKeyboardButton:
     return InlineKeyboardButton(text=text, web_app=WebAppInfo(url=url), style=style)
 
 
+def ubtn(text: str, url: str, style: str | None = None) -> InlineKeyboardButton:
+    """Oddiy havola tugmasi (t.me/…, tel va boshqa saytlar). Mini App uchun emas — u uchun ibtn."""
+    return InlineKeyboardButton(text=text, url=url, style=style)
+
+
 def install_btn(text: str = "📲 Ilovani telefonga o‘rnatish") -> InlineKeyboardButton:
     """Havola tugmasi: sayt BRAUZERDA ochiladi va u yerdan alohida ilova sifatida o'rnatiladi
     (Telegram'ning «bosh ekranga qo'shish» yorlig'i har doim Telegram'ni ochadi)."""
@@ -466,7 +471,7 @@ async def require_sub(message: Message, bot: Bot, then: str = "start") -> bool:
             continue
         try:
             await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [ibtn("📢 Kanalga obuna bo‘lish", link, "primary")], done_btn]))
+                [ubtn("📢 Kanalga obuna bo‘lish", link, "primary")], done_btn]))
             return False
         except TelegramBadRequest as e:
             if "BUTTON_URL" not in str(e):
@@ -2518,7 +2523,7 @@ async def job_billing(bot: Bot):
         kind, n = act
         name = escape(clean_name(c.get("name")))
         owner = c.get("ownerTgId")
-        pay_kb = InlineKeyboardMarkup(inline_keyboard=[[ibtn("💳 To‘lash — admin orqali", pay_url(c, snap.id), "success")]])
+        pay_kb = InlineKeyboardMarkup(inline_keyboard=[[ubtn("💳 To‘lash — admin orqali", pay_url(c, snap.id), "success")]])
         try:
             if kind == "remind":
                 await asyncio.to_thread(snap.reference.update, {"billingReminded": remind_key(c, n)})
@@ -2577,7 +2582,7 @@ async def notify_watches(bot: Bot, cid: str, gi: int, center: dict):
             if not ok:
                 continue
             price = f" · {fmt_sum(g['price'])}" if (g.get("price") or 0) > 0 else ""
-            kb = InlineKeyboardMarkup(inline_keyboard=[[ibtn("📱 Markazni ochish", center_link(cid), "primary")]])
+            kb = InlineKeyboardMarkup(inline_keyboard=[[ubtn("📱 Markazni ochish", center_link(cid), "primary")]])
             try:
                 await bot.send_message(
                     uid,

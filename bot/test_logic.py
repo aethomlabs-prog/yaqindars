@@ -358,5 +358,18 @@ class PriceTest(unittest.TestCase):
         self.assertEqual(billing_action(c, now - timedelta(hours=12)), ("remind", 3))
 
 
+
+class ButtonKindTest(unittest.TestCase):
+    """Mini App tugmasi (ibtn -> web_app) faqat veb-sahifa uchun. t.me havolasi berilsa Telegram
+    BUTTON_URL_INVALID qaytaradi va xabar umuman yuborilmaydi — bunday joylar ubtn (url) bo'lishi shart."""
+
+    def test_no_telegram_links_in_web_app_buttons(self):
+        import re
+        src = open("main.py", encoding="utf-8").read()
+        bad = [m.group(0) for m in re.finditer(r"ibtn\([^\n]*", src)
+               if re.search(r"t\.me|pay_url|center_link|campaign_link|REQUIRED_CHANNEL|, link,", m.group(0))]
+        self.assertEqual(bad, [])
+
+
 if __name__ == "__main__":
     unittest.main()
