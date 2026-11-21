@@ -116,6 +116,7 @@ from aiogram.types import (  # noqa: E402
     InlineQueryResultArticle,
     InputTextMessageContent,
     BotCommandScopeChat,
+    ChatMemberUpdated,
     ErrorEvent,
     CallbackQuery,
     InlineKeyboardButton,
@@ -495,6 +496,38 @@ async def channel_invite_link(bot: Bot) -> str | None:
             log.info("Taklif havolasini olib bo'lmadi: %s", e)
             _invite_link = ""
     return _invite_link or None
+
+
+@router.chat_member()
+async def on_channel_member(event: ChatMemberUpdated, bot: Bot):
+    """Kanal a'zoligi o'zgardi (bot kanalda admin bo'lgani uchun keladi).
+    Chiqib ketsa — eslab qolingan obuna o'chiriladi va bot qayta obuna bo'lishni so'raydi."""
+    if (event.chat.username or "").lower() != REQUIRED_CHANNEL.lower():
+        return
+    user = event.new_chat_member.user
+    if user.is_bot:
+        return
+    status = event.new_chat_member.status
+    if status in SUB_OK_STATUSES:
+        _sub_cache[user.id] = time.time()
+        return
+    if status in ("left", "kicked") and event.old_chat_member.status in SUB_OK_STATUSES:
+        _sub_cache.pop(user.id, None)
+        if is_admin(user.id):
+            return
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [ubtn("📢 Kanalga qaytish", f"https://t.me/{REQUIRED_CHANNEL}", "primary")],
+            [InlineKeyboardButton(text="✅ Qayta obuna bo‘ldim", callback_data="sub:start", style="success")],
+        ])
+        try:
+            await bot.send_message(
+                user.id,
+                "😔 Siz @" + REQUIRED_CHANNEL + " kanalidan chiqdingiz.\n\n"
+                "Botdan foydalanishda davom etish uchun kanalga qayta obuna bo‘ling.",
+                reply_markup=kb,
+            )
+        except Exception as e:  # noqa: BLE001 — botni boshlamagan / bloklagan
+            log.info("Kanaldan chiqqan foydalanuvchiga yozib bo'lmadi (%s): %s", user.id, e)
 
 
 @router.callback_query(F.data.startswith("sub:"))
@@ -2998,7 +3031,8 @@ async def main():
     log.info("Bot ishga tushdi. Adminlar: %s | AI: %s", ", ".join(map(str, ADMIN_IDS)) or "yo‘q",
              f"Groq ({GROQ_MODEL})" if GROQ_API_KEY else "o‘chiq (GROQ_API_KEY yo‘q)")
     try:
-        await dp.start_polling(bot)
+        # chat_member — kanal a'zoligi o'zgarishlari (standart holatda Telegram yubormaydi, aniq so'raymiz)
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
         supervisor.cancel()
         for w in watchers.values():
