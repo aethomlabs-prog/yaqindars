@@ -249,3 +249,30 @@ async def send_backup(db, bot, chat_ids, reason: str = "kunlik") -> str:
             await bot.send_document(chat, BufferedInputFile(part, filename=name), caption=cap)
     log.info("Zaxira nusxa yuborildi (%s): %s, %.0f KB", reason, summary, size_kb)
     return summary
+
+
+# ---------------- Uyg'oq saqlash (bepul hostinglar uchun) ----------------
+# Render bepul Web Service 15 daqiqa kiruvchi so'rovsiz qolsa uxlaydi. Bot o'z ochiq manziliga
+# (RENDER_EXTERNAL_URL yoki KEEPALIVE_URL) har 10 daqiqada so'rov yuboradi — chegaradan 5 daqiqa oldin.
+# So'rov tashqi proksi orqali o'tadi, shuning uchun «faollik» hisoblanadi. Tashqi uyg'otgich (cron-job.org) — zaxira.
+KEEPALIVE_EVERY = 10 * 60  # soniya
+
+
+def keepalive_url() -> str | None:
+    base = (os.getenv("KEEPALIVE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").strip().rstrip("/")
+    if not base.startswith("https://"):
+        return None
+    return base if base.endswith("/health") else f"{base}/health"
+
+
+async def keepalive_loop(url: str, ssl_ctx=None):
+    import aiohttp  # noqa: PLC0415
+
+    timeout = aiohttp.ClientTimeout(total=30)
+    while True:
+        await asyncio.sleep(KEEPALIVE_EVERY)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as s, s.get(url, ssl=ssl_ctx) as r:
+                log.debug("Uyg'otish so'rovi: %s -> %s", url, r.status)
+        except Exception as e:  # noqa: BLE001
+            log.info("Uyg'otish so'rovi bo'lmadi (%s): %s", url, e)

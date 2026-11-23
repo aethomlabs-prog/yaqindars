@@ -1,4 +1,5 @@
 """Yangi mantiq testlari:  python -m unittest test_logic -v   (bot/ papkasida)"""
+import os
 import unittest
 from datetime import datetime, timedelta, timezone
 
@@ -369,6 +370,44 @@ class ButtonKindTest(unittest.TestCase):
         bad = [m.group(0) for m in re.finditer(r"ibtn\([^\n]*", src)
                if re.search(r"t\.me|pay_url|center_link|campaign_link|REQUIRED_CHANNEL|, link,", m.group(0))]
         self.assertEqual(bad, [])
+
+
+
+class KeepaliveTest(unittest.TestCase):
+    def test_url_from_env(self):
+        import ops
+        old = {k: os.environ.pop(k, None) for k in ("KEEPALIVE_URL", "RENDER_EXTERNAL_URL")}
+        try:
+            self.assertIsNone(ops.keepalive_url())  # kompyuterda — o'chiq
+            os.environ["RENDER_EXTERNAL_URL"] = "https://yaqindars-bot.onrender.com/"
+            self.assertEqual(ops.keepalive_url(), "https://yaqindars-bot.onrender.com/health")
+            os.environ["KEEPALIVE_URL"] = "http://xavfsiz-emas"
+            self.assertIsNone(ops.keepalive_url())  # faqat https
+        finally:
+            for k, v in old.items():
+                os.environ.pop(k, None)
+                if v is not None:
+                    os.environ[k] = v
+
+    def test_loop_hits_health_server(self):
+        import asyncio
+        import ops
+        os.environ["PORT"] = "18089"
+
+        async def run():
+            runner = await ops.start_health_server()
+            hits = []
+            orig = ops.health_status
+            ops.health_status = lambda now=None: (hits.append(1), orig(now))[1]
+            ops.KEEPALIVE_EVERY = 0.05
+            task = asyncio.create_task(ops.keepalive_loop("http://127.0.0.1:18089/health"))
+            await asyncio.sleep(0.4)
+            task.cancel()
+            ops.health_status = orig
+            await runner.cleanup()
+            return len(hits)
+
+        self.assertGreaterEqual(asyncio.run(run()), 2)
 
 
 if __name__ == "__main__":

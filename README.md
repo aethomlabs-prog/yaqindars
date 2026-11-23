@@ -336,10 +336,34 @@ python scripts/restore.py nusxa.zip.part1 nusxa.zip.part2 --apply    # haqiqatda
 ```
 `--apply` zaxiradagi hujjatlarni o‘sha holatga qaytaradi; zaxirada yo‘q yangi hujjatlarga tegmaydi.
 
-### Render / VPS
+### Render — BEPUL, 24/7 (tavsiya etiladi)
 
-**Render**: render.com → New → **Blueprint** → repo’ni tanlang (`render.yaml` o‘qiladi) → o‘zgaruvchilarni
-kiriting → Apply. Background Worker pullik (Starter). Loglar: servis → **Logs**.
+Bepul Web Service 15 daqiqa kiruvchi so‘rov bo‘lmasa uxlaydi. Bot uxlamasligi uchun uch qatlam bor:
+1. **Botning o‘zi** — har 10 daqiqada o‘z ochiq manziliga (`RENDER_EXTERNAL_URL/health`) so‘rov yuboradi, chegaradan 5 daqiqa oldin;
+2. **cron-job.org** — har 5 daqiqa (aniq, bepul);
+3. **GitHub Actions** — har 10 daqiqa (`.github/workflows/keepalive.yml`, zaxira).
+
+Oyiga 750 bepul soat — bitta xizmat 24/7 uchun yetadi (744 soat).
+
+1. **render.com** → **Get Started** → **GitHub** bilan kiring (karta so‘ralmaydi).
+2. **New +** → **Blueprint** → `yaqindars` repo’sini tanlang → `render.yaml` o‘qiladi → **Apply**.
+3. So‘ralgan o‘zgaruvchilarni kiriting (`bot/.env` dagi qiymatlar):
+   `BOT_TOKEN`, `WEBAPP_URL`, `ADMIN_IDS`, `GROQ_API_KEY`, va `FIREBASE_CREDENTIALS_JSON` —
+   `serviceAccount.json` faylining **butun matni**. Qolganlari (`REQUIRED_CHANNEL`, `GROQ_MODEL`) o‘zi to‘ldirilgan.
+4. Deploy tugagach (3–6 daqiqa) servis sahifasining yuqorisida manzil chiqadi:
+   `https://yaqindars-bot-xxxx.onrender.com`. Brauzerda `…/health` → `ok` yoki `standby`.
+   `standby` — kompyuterdagi bot hali ishlayapti; uni to‘xtating, 90 soniyada Render’dagi bot ishga tushadi.
+5. **Logs** bo‘limida: `Yagona nusxa qulfi olindi` → `Bot ishga tushdi` → `Uyg'oq saqlash: har 10 daqiqada …`.
+6. **cron-job.org** → **Sign up** (bepul) → **Create cronjob** → URL: `https://<manzil>/health` →
+   **Every 5 minutes** → **Create**.
+7. (ixtiyoriy) GitHub → repo → **Settings** → **Secrets and variables** → **Actions** → **Variables** →
+   **New repository variable**: `BOT_HEALTH_URL` = `https://<manzil>/health`.
+8. (ixtiyoriy) **UptimeRobot** — bot to‘xtasa email/Telegram’ga xabar (yuqoridagi bo‘lim).
+
+Eslatma: bepul shartlarni Render o‘zgartirishi mumkin. Agar bot baribir uxlab qolsa yoki 750 soat yetmasa —
+Starter tarifi (oyiga ~$7) yoki Railway Hobby ($5) da uyg‘otgich kerak emas.
+
+### VPS
 
 **Istalgan VPS (Docker):**
 ```bash

@@ -1,0 +1,22 @@
+# Zaxira «uyg'otgich»: Render bepul xizmati 15 daqiqa so'rovsiz qolsa uxlaydi.
+# Asosiy uyg'otgich — cron-job.org / UptimeRobot (har 5 daqiqa, aniq). GitHub cron ba'zan kechikadi,
+# shuning uchun bu faqat qo'shimcha himoya. Sozlash: GitHub → Settings → Secrets and variables → Actions →
+# Variables → New repository variable: BOT_HEALTH_URL = https://<xizmat>.onrender.com/health
+name: Botni uyg'oq saqlash
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+permissions: {}
+jobs:
+  ping:
+    if: ${{ vars.BOT_HEALTH_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: /health ni so'rash
+        env:
+          URL: ${{ vars.BOT_HEALTH_URL }}
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 15 --max-time 90 "$URL" || true)
+          echo "Javob: $code"

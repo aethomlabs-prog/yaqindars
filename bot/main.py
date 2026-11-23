@@ -3028,6 +3028,10 @@ async def main():
 
     ops.STATE.last_ok = time.time()
     heartbeat = asyncio.create_task(ops.heartbeat_loop(db, bot, on_lock_lost))
+    ka_url = ops.keepalive_url()
+    keepalive = asyncio.create_task(ops.keepalive_loop(ka_url, ssl_context())) if ka_url else None
+    if ka_url:
+        log.info("Uyg'oq saqlash: har %s daqiqada %s", ops.KEEPALIVE_EVERY // 60, ka_url)
     log.info("Bot ishga tushdi. Adminlar: %s | AI: %s", ", ".join(map(str, ADMIN_IDS)) or "yo‘q",
              f"Groq ({GROQ_MODEL})" if GROQ_API_KEY else "o‘chiq (GROQ_API_KEY yo‘q)")
     try:
@@ -3040,8 +3044,9 @@ async def main():
                 w.unsubscribe()
             except Exception:  # noqa: BLE001
                 pass
-        for t in (reminder, cleanup, scheduler, self_check, heartbeat, ratings):
-            t.cancel()
+        for t in (reminder, cleanup, scheduler, self_check, heartbeat, ratings, keepalive):
+            if t:
+                t.cancel()
         if not lost["v"]:
             await asyncio.to_thread(ops.release_lock, db)
         if health:
