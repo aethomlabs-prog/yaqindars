@@ -342,3 +342,50 @@ def parse_ai_reply(raw: str, valid_ids: set) -> dict | None:
             seen.add(c)
             out.append(c)
     return {"text": text.strip()[:1200], "cards": out[:3]}
+
+
+# ---------------- Firebase service account (bulut serverlari uchun) ----------------
+SECRET_FILE_PATHS = ("/etc/secrets/serviceAccount.json", "/etc/secrets/service-account.json")
+
+
+class CredError(Exception):
+    pass
+
+
+def load_service_account(raw_json: str, path: str, extra_paths=SECRET_FILE_PATHS) -> dict | str:
+    """Firebase kaliti: dict (JSON matn) yoki fayl yo'li (str).
+    Qabul qiladi: xom JSON; qo'shtirnoq ichidagi JSON; base64 JSON; o'zgaruvchiga yozilgan fayl yo'li;
+    Render «Secret File» (/etc/secrets/serviceAccount.json); oddiy fayl (FIREBASE_CREDENTIALS).
+    Xato xabarida kalitning o'zi ko'rsatilmaydi — faqat uzunligi va birinchi belgi turi."""
+    import base64  # noqa: PLC0415
+    import os  # noqa: PLC0415
+
+    raw = (raw_json or "").strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "'\"":
+        raw = raw[1:-1].strip()
+    if raw:
+        if raw.startswith("{"):
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as e:
+                raise CredError(f"FIREBASE_CREDENTIALS_JSON — JSON buzilgan ({e.msg}, {e.pos}-belgi). "
+                                "Faylning BUTUN matnini qayta nusxalang yoki Secret File sifatida yuklang.") from None
+        elif os.path.isfile(raw):
+            return raw
+        else:
+            try:
+                data = json.loads(base64.b64decode(raw, validate=True))
+            except Exception:  # noqa: BLE001
+                first = "harf/raqam" if raw[:1].isalnum() else repr(raw[:1])
+                raise CredError(
+                    f"FIREBASE_CREDENTIALS_JSON — JSON emas (uzunligi {len(raw)}, boshlanishi: {first}; '{{' bo'lishi kerak). "
+                    "serviceAccount.json faylini Bloknotda ochib, Ctrl+A, Ctrl+C bilan BUTUN matnini qo'ying — "
+                    "yoki Render → Environment → Secret Files ga serviceAccount.json nomi bilan yuklang."
+                ) from None
+        if not isinstance(data, dict) or data.get("type") != "service_account" or "private_key" not in data:
+            raise CredError("FIREBASE_CREDENTIALS_JSON — bu service account kaliti emas (type=service_account va private_key bo'lishi kerak).")
+        return data
+    for p in (path, *extra_paths):
+        if p and os.path.isfile(p):
+            return p
+    raise CredError(f"Firebase kaliti topilmadi: {path}, FIREBASE_CREDENTIALS_JSON yoki Render Secret File (/etc/secrets/serviceAccount.json).")

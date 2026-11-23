@@ -7,7 +7,6 @@
 - Admin: tasdiqlash / rad etish, /vip, /stat
 """
 import asyncio
-import json
 import ssl
 import logging
 import logging.handlers
@@ -42,10 +41,14 @@ except ValueError:
     sys.exit("XATO: ADMIN_IDS faqat raqamlardan iborat bo‘lsin (vergul bilan), masalan: 123456789,987654321")
 if not WEBAPP_URL.startswith("https://"):
     sys.exit("XATO: WEBAPP_URL https:// bilan boshlanishi kerak (Telegram faqat HTTPS Mini App’ni ochadi).")
-# Bulutda (Railway/Render) fayl o'rniga butun JSON'ni FIREBASE_CREDENTIALS_JSON o'zgaruvchisiga qo'yish mumkin
-CRED_JSON = os.getenv("FIREBASE_CREDENTIALS_JSON", "").strip()
-if not CRED_JSON and not os.path.isfile(CRED_PATH):
-    sys.exit(f"XATO: Firebase service account topilmadi: {CRED_PATH} (yoki FIREBASE_CREDENTIALS_JSON ni bering)")
+# Firebase kaliti: fayl (FIREBASE_CREDENTIALS), butun JSON (FIREBASE_CREDENTIALS_JSON) yoki
+# Render «Secret File» (/etc/secrets/serviceAccount.json) — qaysi biri bo'lsa
+from parsers import CredError, load_service_account  # noqa: E402
+
+try:
+    FIREBASE_CRED = load_service_account(os.getenv("FIREBASE_CREDENTIALS_JSON", ""), CRED_PATH)
+except CredError as e:
+    sys.exit(f"XATO: {e}")
 
 def _with_param(url: str, key: str, value: str) -> str:
     parts = urlsplit(url)
@@ -183,7 +186,7 @@ from parsers import (  # noqa: E402
     validate_init_data,
 )
 
-firebase_admin.initialize_app(credentials.Certificate(json.loads(CRED_JSON) if CRED_JSON else CRED_PATH))
+firebase_admin.initialize_app(credentials.Certificate(FIREBASE_CRED))
 db = firestore.client()
 CENTERS = db.collection("centers")
 APPS = db.collection("applications")
